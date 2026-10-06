@@ -1,0 +1,88 @@
+{
+  "entity": {
+    "name": "demoWorkstation",
+    "mainAttribute": "cn",
+    "objectClass": ["top", "device", "twakeWhitePages", "demoWorkstation"],
+    "singularName": "computer",
+    "pluralName": "computers",
+    "base": "ou=computers,__ldap_base__",
+    "label": { "en": "Computers", "fr": "Postes" },
+    "singularLabel": { "en": "computer", "fr": "poste" }
+  },
+  "strict": true,
+  "attributes": {
+    "objectClass": {
+      "type": "array",
+      "items": { "type": "string", "test": "^[a-zA-Z][a-zA-Z0-9-]*$" },
+      "default": ["top", "device", "twakeWhitePages", "demoWorkstation"],
+      "required": true,
+      "fixed": true
+    },
+    "cn": {
+      "type": "string",
+      "required": true,
+      "role": "identifier",
+      "test": "^(?!({{ sw_reserved_host_names | join('|') }})$)[a-z0-9][a-z0-9-]{0,62}$",
+      "label": { "en": "Host name", "fr": "Nom d'hôte" }
+    },
+    "description": {
+      "type": "string",
+      "required": false,
+      "label": { "en": "Description", "fr": "Description" }
+    },
+    "l": {
+      "type": "string",
+      "required": false,
+      "label": { "en": "Location", "fr": "Emplacement" }
+    },
+    "serialNumber": {
+      "type": "string",
+      "required": false,
+      "label": { "en": "Serial number", "fr": "Numéro de série" }
+    },
+    "owner": {
+      "type": "pointer",
+      "branch": ["ou=users,__LDAP_BASE__"],
+      "required": false,
+      "label": { "en": "Owner", "fr": "Responsable" }
+    },
+    "twakeDepartmentLink": {
+      "type": "pointer",
+      "branch": ["__LDAP_BASE__"],
+      "required": true,
+      "role": "organizationLink",
+      "label": { "en": "Organization", "fr": "Organisation" }
+    },
+    "twakeDepartmentPath": {
+      "type": "string",
+      "required": true,
+      "generated": true,
+      "role": "organizationPath",
+      "test": "^[^\\r\\n]{1,4096}$",
+      "label": { "en": "Organization path", "fr": "Chemin de l'organisation" }
+    },
+    "twakeAccountStatus": {
+      "type": "pointer",
+      "branch": ["ou=twakeAccountStatus,ou=nomenclature,__LDAP_BASE__"],
+      "required": true,
+      "generated": true,
+      "role": "accountStatus",
+      "default": "cn=active,ou=twakeAccountStatus,ou=nomenclature,__LDAP_BASE__",
+      "states": {
+        "enabled": "cn=active,ou=twakeAccountStatus,ou=nomenclature,__LDAP_BASE__",
+        "disabled": "cn=disabled,ou=twakeAccountStatus,ou=nomenclature,__LDAP_BASE__"
+      },
+      "label": { "en": "Status", "fr": "État" }
+    },
+    "userPassword": {
+      "type": "string",
+      "required": false,
+      "role": "password",
+      "neverReturn": true,
+      "label": {
+        "en": "One-time join password",
+        "fr": "Mot de passe d'enrôlement"
+      }
+    }
+  }
+}

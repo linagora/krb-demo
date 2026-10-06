@@ -8,3 +8,12 @@ sw_keyboard_variant: ""
 sw_dc: "{{ groups['domain_controller'][0] }}"
 sw_workstation_fqdn: "{{ inventory_hostname }}.{{ sw_domain }}"
 sw_host_principal: "host/{{ sw_workstation_fqdn }}@{{ sw_realm }}"
+
+# Organization the computer belongs to in the console, as a path
+# ("Galactic Empire / Imperial Navy"); empty for the top organization.
+sw_workstation_organization: ""
+sw_computer_dn: "cn={{ inventory_hostname }},ou=computers,{{ sw_ldap_base }}"
+sw_workstation_org_dn: >-
+  {{ ((sw_workstation_organization.split(' / ') | reverse | map('regex_replace', '^', 'ou=') | list
+       if sw_workstation_organization else [])
+      + ['ou=organization,' ~ sw_ldap_base]) | join(',') }}

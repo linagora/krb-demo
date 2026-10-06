@@ -6,6 +6,7 @@
     - kerberos
     - demo_data
     - posix
+    - computers
     - reverse_proxy
     - lemonldap
     - directory_manager

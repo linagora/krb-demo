@@ -5,6 +5,12 @@
     src: "{{ sw_etc }}/pki/ca.crt"
   register: sw_ca_cert
 
+- name: Fingerprint the computers' schema
+  ansible.builtin.stat:
+    path: "{{ sw_etc }}/schemas/computers.json"
+    checksum_algorithm: sha256
+  register: sw_tdm_schema
+
 - name: Run Twake Directory Manager
   community.docker.docker_container:
     name: twake-directory-manager
@@ -17,9 +23,12 @@
     etc_hosts: "{{ {sw_fqdn: 'host-gateway', sw_portal_host: 'host-gateway'} }}"
     volumes:
       - "{{ sw_etc }}/pki/ca.crt:/etc/ssl/star-wars-demo-ca.crt:ro"
+      - "{{ sw_etc }}/schemas:/schemas:ro"
     # A new CA recreates the container, single-file mounts being stale.
     labels:
       star-wars.ca: "{{ sw_ca_cert.content | hash('sha256') }}"
+      # ldap-rest reads its schemas at start.
+      star-wars.schemas: "{{ sw_tdm_schema.stat.checksum }}"
   no_log: true
   diff: false
 

@@ -31,5 +31,7 @@ olcAccess: to dn.subtree="ou=applicative,{{ sw_ldap_base }}"
   by * none
 olcAccess: to *
   by dn.exact="{{ sw_ldap_llng_dn }}" read
+  by self read
+  by dn.children="ou=computers,{{ sw_ldap_base }}" none
   by users read
   by * none

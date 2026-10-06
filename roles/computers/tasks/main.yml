@@ -1,0 +1,162 @@
+# Computers: an entity of the console, kept in step with the KDC, and a join
+# service that hands a computer its keytab for a one-time password.
+
+# Directory
+
+- name: Copy the workstation schema
+  ansible.builtin.copy:
+    src: demo-workstation.ldif
+    dest: /etc/ldap/schema/demo-workstation.ldif
+    mode: "0644"
+
+- name: List the loaded schemas
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b cn=schema,cn=config -s one cn
+  register: sw_ldap_schemas
+  changed_when: false
+
+- name: Load the workstation schema
+  ansible.builtin.command: ldapadd -Q -Y EXTERNAL -H ldapi:/// -f /etc/ldap/schema/demo-workstation.ldif
+  when: "'}demoworkstation\n' not in (sw_ldap_schemas.stdout ~ '\n')"
+  changed_when: true
+
+- name: Create the computers branch and their password policy
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "{{ item.dn }}"
+    objectClass: "{{ item.objectClass }}"
+    attributes: "{{ item.attributes }}"
+  loop:
+    - dn: "ou=computers,{{ sw_ldap_base }}"
+      objectClass: organizationalUnit
+      attributes:
+        description: Workstations of the domain
+    # A join password is used once and never changed by its owner; a few
+    # wrong ones lock it, against guessing.
+    - dn: "cn=computer,ou=policies,{{ sw_ldap_base }}"
+      objectClass: [applicationProcess, pwdPolicy]
+      attributes:
+        pwdAttribute: userPassword
+        pwdMustChange: "FALSE"
+        pwdLockout: "TRUE"
+        pwdMaxFailure: "5"
+        pwdLockoutDuration: "600"
+        pwdFailureCountInterval: "600"
+  loop_control:
+    label: "{{ item.dn }}"
+
+- name: Create the directory of the console's extra schemas
+  ansible.builtin.file:
+    path: "{{ sw_etc }}/schemas"
+    state: directory
+    mode: "0755"
+
+# The domain controller's names are not computers: a computer named after
+# one would be handed its host principal.
+# A password change must quote the current password: of two requests racing
+# with the same one-time password, the second fails.
+- name: Make join passwords strictly single-use
+  community.general.ldap_attrs:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "cn=computer,ou=policies,{{ sw_ldap_base }}"
+    attributes:
+      pwdSafeModify: "TRUE"
+    state: exact
+
+- name: Give the console the computers' schema
+  ansible.builtin.template:
+    src: computers.json.j2
+    dest: "{{ sw_etc }}/schemas/computers.json"
+    mode: "0644"
+
+# Kerberos
+
+- name: Read the workstation principals' policy
+  ansible.builtin.command: kadmin.local -q "getpol {{ sw_computer_krb_policy }}"
+  register: sw_krb_computer_policy
+  changed_when: false
+
+# No rule in it: it marks the principals the reconciler may delete.
+- name: Create the workstation principals' policy
+  ansible.builtin.command: kadmin.local -q "addpol {{ sw_computer_krb_policy }}"
+  when: "'Policy: ' not in sw_krb_computer_policy.stdout"
+  changed_when: true
+
+- name: List the principals
+  ansible.builtin.command: kadmin.local -q listprincs
+  register: sw_krb_listprincs
+  changed_when: false
+
+- name: Create the join service's principal
+  ansible.builtin.command: kadmin.local -q "addprinc -randkey {{ sw_join_principal }}"
+  when: sw_join_principal not in sw_krb_listprincs.stdout_lines
+  changed_when: true
+
+- name: Create the join service's user
+  ansible.builtin.user:
+    name: sw-join
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+    create_home: false
+
+# ktadd draws a new key: the keytab is written once.
+- name: Export the join service's keytab
+  ansible.builtin.command:
+    cmd: kadmin.local -q "ktadd -k {{ sw_join_keytab }} {{ sw_join_principal }}"
+    creates: "{{ sw_join_keytab }}"
+
+- name: Let the join service read its keytab
+  ansible.builtin.file:
+    path: "{{ sw_join_keytab }}"
+    owner: sw-join
+    group: sw-join
+    mode: "0600"
+
+# Workstations used to be joined with keytabs exported here.
+- name: Remove the keytabs of the former join method
+  ansible.builtin.file:
+    path: "{{ sw_etc }}/krb/hosts"
+    state: absent
+
+# Reconciler
+
+- name: Install the reconciler and the join service
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/usr/local/sbin/{{ item }}"
+    mode: "0755"
+  loop: [sw-computers, sw-join]
+  notify: Restart the join service
+
+- name: Install their systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop: [sw-computers.service, sw-computers.timer, sw-join.service]
+  notify:
+    - Reload systemd for computers
+    - Restart the join service
+
+- name: Apply the systemd changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Bring the KDC in step with the directory
+  ansible.builtin.command: /usr/local/sbin/sw-computers
+  register: sw_computers_run
+  changed_when: sw_computers_run.stdout | length > 0
+
+- name: Start the reconciler's timer
+  ansible.builtin.systemd_service:
+    name: sw-computers.timer
+    state: started
+    enabled: true
+
+- name: Start the join service
+  ansible.builtin.systemd_service:
+    name: sw-join
+    state: started
+    enabled: true

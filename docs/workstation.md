@@ -51,14 +51,25 @@ command line.
 
 ### 3. Join the realm
 
-`/etc/krb5.conf` names the realm and its KDC. On the domain controller, the
-playbook creates the machine's principal, `host/pc1.star.wars@STAR.WARS`,
-exports its key, and installs it as `/etc/krb5.keytab`.
+`/etc/krb5.conf` names the realm and its KDC. The machine is then joined
+the way [computers](computers.md) are joined by hand:
+
+1. the playbook declares the computer in the directory (`cn=pc1,ou=computers`,
+   in the organization `sw_workstation_organization`, the top one by
+   default), where the console shows it;
+2. it sets a one-time join password on it;
+3. on the machine, `star-wars-join` trades that password for the keytab of
+   `host/pc1.star.wars@STAR.WARS`, installed as `/etc/krb5.keytab`.
 
 The machine's key lets sssd check that the ticket it gets at login comes
 from the real KDC, and lets other machines of the domain log in to it over
-SSH with their ticket. The keytab is kept on the domain controller
-(`/etc/star-wars/krb/hosts/`): reinstalling the machine reuses it.
+SSH with their ticket. It also ties the machine to its computer in the
+console: disabling the computer stops every login on the machine.
+
+A run of the playbook joins the machine again only when its key no longer
+works (`kinit -k` fails): a reinstalled machine, a principal recreated. A
+computer disabled in the console is left alone: re-enabling it is an
+administrator's call.
 
 ### 4. Identities and logins: sssd
 
@@ -106,17 +117,15 @@ For a machine outside the playbook, the same steps:
 # 1-2: /etc/hosts as above, and the CA
 sudo cp star-wars-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates
 
-# 3: on the domain controller, create the machine's principal and keytab
-sudo kadmin.local -q "addprinc -randkey host/pc9.star.wars"
-sudo kadmin.local -q "ktadd -k /tmp/pc9.keytab host/pc9.star.wars"
-#    then copy /tmp/pc9.keytab to the machine as /etc/krb5.keytab (mode 600)
-
-# 4: on the machine
-sudo apt install krb5-user sssd sssd-ldap sssd-krb5 libnss-sss libpam-sss
-#    write /etc/krb5.conf and /etc/sssd/sssd.conf (mode 640) from the
-#    templates in roles/kerberos/templates/ and roles/workstation/templates/
+# 3-4: the packages, then /etc/krb5.conf and /etc/sssd/sssd.conf (mode 640)
+#      from the templates in roles/kerberos/templates/ and
+#      roles/workstation/templates/
+sudo apt install curl krb5-user sssd sssd-ldap sssd-krb5 libnss-sss libpam-sss
 sudo pam-auth-update --enable mkhomedir
-sudo systemctl restart sssd
+
+# 3: create the computer in the console, reset its password, and join with
+#    it (star-wars-join comes from roles/workstation/templates/)
+sudo star-wars-join pc9
 ```
 
 The workstation service account's password is in
@@ -129,6 +138,7 @@ getent passwd hsolo                     # the account, from the directory
 id lskywalker                           # uid, and the starwars group
 sudo sssctl domain-status star.wars     # "Online status: Online"
 sudo klist -k /etc/krb5.keytab          # host/pc1.star.wars@STAR.WARS
+sudo kinit -k -c MEMORY:x host/pc1.star.wars   # the key works
 ```
 
 ## Troubleshooting
@@ -139,5 +149,9 @@ sudo klist -k /etc/krb5.keytab          # host/pc1.star.wars@STAR.WARS
 | The password is right, the login is refused, and `krb5_child.log` says *PAC check failed* | The KDC puts a PAC in tickets, which sssd cannot check without AD or IPA. The playbook turns PACs off on the KDC (`disable_pac`) |
 | The login is refused for a new account | It has no Kerberos key yet: it must sign in once on the SSO portal (see [administration](administration.md#creating-an-account)) |
 | `Access denied` in the journal | The account is not Active |
+| Every new login is refused, with *System error* in the journal | The computer is disabled in the console: its principal gets no tickets, so sssd cannot check any login |
+| `star-wars-join` answers *unknown computer or wrong password* | The computer does not exist in the console, or its password was used already, mistyped, or locked after five failures (ten minutes) |
+| `star-wars-join` answers *this computer is disabled* | Enable it in the console, and reset its password again: the refused attempt spent it |
+| `star-wars-join` answers *this host is not managed by the console* | Its host principal was created by other means: the console cannot hand it over |
 | Firefox shows the login form instead of signing in | No ticket (`klist`), or the name issue of step 1: the KDC's log tells which principal Firefox asked for |
 | Clock skew errors | Kerberos refuses clocks more than five minutes apart: check `timedatectl` on both machines |

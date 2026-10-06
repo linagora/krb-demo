@@ -11,3 +11,15 @@ sw_tdm_env:
   DM_BASE_URL: "https://{{ sw_directory_host }}"
   # The provider's certificate comes from the demo CA.
   NODE_EXTRA_CA_CERTS: /etc/ssl/star-wars-demo-ca.crt
+  # The image's own list (its Dockerfile), plus the computers.
+  DM_LDAP_FLAT_SCHEMA: "{{ (sw_tdm_image_flat_schemas + ['/schemas/computers.json']) | join(',') }}"
+
+sw_tdm_image_flat_schemas:
+  - /app/node_modules/ldap-rest/static/schemas/twake/users.json
+  - /app/node_modules/ldap-rest/static/schemas/twake/positions.json
+  - /app/node_modules/ldap-rest/static/schemas/twake/nomenclature/twakeTitle.json
+  - /app/node_modules/ldap-rest/static/schemas/twake/nomenclature/twakeAccountStatus.json
+  - /app/node_modules/ldap-rest/static/schemas/twake/nomenclature/twakeDeliveryMode.json
+  - /app/node_modules/ldap-rest/static/schemas/twake/nomenclature/twakeListType.json
+  - /app/node_modules/ldap-rest/static/schemas/twake/nomenclature/twakeMailboxType.json
+  - /app/node_modules/ldap-rest/static/schemas/twake/nomenclature/twakeDomain.json

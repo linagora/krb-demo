@@ -2,4 +2,6 @@
 # krb-provisioning looks the principal up (i), then creates it (a) or resets
 # its key (c, m). No delete.
 {{ sw_krb_llng_principal }} acmi
+# The join service: inquire, add and change keys of host/* principals only.
+{{ sw_join_principal }} aci host/*@{{ sw_realm }}
 */admin@{{ sw_realm }} *

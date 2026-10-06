@@ -16,7 +16,7 @@ account:
 | Machine | Size | Network |
 |---|---|---|
 | Domain controller | 2 CPUs, 4 GB RAM, 10 GB disk | Internet access (Debian packages and two container images) |
-| Workstation (optional) | 2 CPUs, 3 GB RAM, 10 GB disk | Reaches the domain controller on 88, 389, 443 and 749 |
+| Workstation (optional) | 2 CPUs, 3 GB RAM, 10 GB disk | Reaches the domain controller on 88, 389 and 443 |
 
 Every machine must be able to reach the domain controller at one address,
 `sw_dc_address`. It defaults to the domain controller's default IPv4 address
@@ -79,6 +79,8 @@ others reach it at another one.
 | LemonLDAP::NG | container `lemonldap`, behind nginx: `https://auth.star.wars`, `https://manager.star.wars` |
 | Twake Directory Manager | container `twake-directory-manager`, behind nginx: `https://directory.star.wars` |
 | Unix identities | timer `sw-posix-accounts`, every 30 seconds |
+| Computers ↔ KDC | timer `sw-computers`, every 30 seconds |
+| Join service | `sw-join`, behind nginx: `https://dc.star.wars/join` |
 | Demo CA and certificate | `/etc/star-wars/pki/` |
 | LemonLDAP::NG configuration | `/etc/star-wars/llng/over/`, one file per key |
 | Keytabs | `/etc/star-wars/krb/` |
@@ -100,6 +102,7 @@ The useful ones; the others are in `group_vars/all.yml` and the roles'
 | `sw_dc_address` | the DC's default IPv4 | Address every machine reaches the domain controller at |
 | `sw_demo_password` | empty | One password for every demo user; empty, each password is the login |
 | `sw_workstation_desktop` | `true` | XFCE, LightDM and Firefox on workstations; `false` for command line only |
+| `sw_workstation_organization` | empty | Organization a workstation's computer belongs to in the console, as a path (`Galactic Empire / Imperial Navy`); empty for the top one |
 | `sw_keyboard_layout`, `sw_keyboard_variant` | `us`, empty | Keyboard of the workstations' desktop |
 | `sw_llng_extra_conf` | `{}` | LemonLDAP::NG keys added to, or replacing, the playbook's |
 | `sw_llng_image`, `sw_tdm_image` | pinned | Container images; the LemonLDAP::NG one is pinned by digest to the tested image |
@@ -118,7 +121,6 @@ Generated on the first run, kept on the controller in `secrets/star.wars/`
 | `ldap-directory-manager`, `ldap-lemonldap`, `ldap-workstation` | The service accounts of the console, the SSO and the workstations |
 | `krb-master` | The KDC's master key |
 | `oidc-directory-manager` | The console's OpenID Connect client secret |
-| `keytabs/` | A copy of each workstation's keytab |
 
 Keep this directory to run the playbook again from elsewhere. Without it, a
 run generates new secrets: the service accounts and the OpenID Connect

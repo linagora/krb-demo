@@ -61,6 +61,17 @@ sw_krb_llng_principal: "lemonldap/provisioning@{{ sw_realm }}"
 sw_krb_http_principal: "HTTP/{{ sw_portal_host }}@{{ sw_realm }}"
 sw_krb_llng_keytab: "{{ sw_etc }}/krb/lemonldap.keytab"
 
+# Computers: kept in step with the KDC by the computers role. Principals it
+# creates carry this kadmin policy, its mark: it only ever deletes those.
+sw_computer_krb_policy: workstation
+# The join service trades a computer's one-time password for its keytab, at
+# https://<sw_fqdn>/join. Its principal may only manage host/* principals.
+sw_join_principal: "join/service@{{ sw_realm }}"
+sw_join_keytab: "{{ sw_etc }}/krb/join.keytab"
+sw_join_port: 8090
+# Names no computer may take: the domain controller's own.
+sw_reserved_host_names: "{{ [sw_hostname] + ([sw_portal_host, sw_manager_host, sw_directory_host] | map('regex_replace', '\\..*$', '') | list) }}"
+
 # Unix identities: every account gets a uidNumber from sw_uid_min up, and the
 # primary group below. The posix role assigns them, the console knows nothing
 # of them.

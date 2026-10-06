@@ -1,0 +1,11 @@
+# A workstation of the demo domain: a device (cn = host name), attached to an
+# organization through twakeWhitePages, with this auxiliary class for its
+# state and its one-time join password.
+#
+# The OID arc 1.3.6.1.4.1.99999 is the experimental one ldap-rest's test
+# schemas use: fine for a demo, not for production.
+
+dn: cn=demoworkstation,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: demoworkstation
+olcObjectClasses: {0}( 1.3.6.1.4.1.99999.3.2.1 NAME 'demoWorkstation' DESC 'Workstation of the demo domain' SUP top AUXILIARY MAY ( twakeAccountStatus $ userPassword ) )

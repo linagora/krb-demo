@@ -29,6 +29,7 @@ flowchart LR
     slapd[("OpenLDAP<br/>dc=star,dc=wars")]
     kdc["MIT KDC + kadmind<br/>STAR.WARS"]
     posix["posix timer"]
+    comp["computers timer<br/>join service"]
   end
   login -- "users, groups (LDAP + StartTLS)" --> slapd
   login -- "password → ticket" --> kdc
@@ -40,6 +41,9 @@ flowchart LR
   llng -- "checks passwords" --> slapd
   llng -- "sets Kerberos keys (krb-provisioning)" --> kdc
   posix -- "uidNumber, home…" --> slapd
+  comp -- "computers" --> slapd
+  comp -- "host/ principals" --> kdc
+  login -. "star-wars-join: one-time password → keytab" .-> comp
 ```
 
 | Component | Role |
@@ -48,7 +52,7 @@ flowchart LR
 | Twake Directory Manager | Administration console of the directory, delegated per organization |
 | LemonLDAP::NG | SSO portal and OpenID Connect provider; Kerberos SSO for domain workstations |
 | MIT Kerberos | The realm's KDC; LemonLDAP::NG keeps its keys in step with the directory passwords |
-| Workstations | Debian 13 with sssd (identities from LDAP, passwords from Kerberos), XFCE and Firefox |
+| Workstations | Debian 13 with sssd (identities from LDAP, passwords from Kerberos), XFCE and Firefox; managed as computers in the console, and joined with a one-time password |
 
 ## Who administers what in the galaxy
 
@@ -107,5 +111,6 @@ To deploy on machines of your own, see [deployment](docs/deployment.md).
 | [Deployment](docs/deployment.md) | Installing the domain controller and workstations on your machines |
 | [Lab](docs/lab.md) | Running the whole demo in two local VMs |
 | [Administration](docs/administration.md) | Managing users, organizations and groups; what happens behind the console |
+| [Computers](docs/computers.md) | Workstations in the console: creating, joining with a one-time password, disabling |
 | [Joining a PC](docs/workstation.md) | What joining a workstation to the domain does, and how to do it |
 | [Using a workstation](docs/desktop.md) | A user's day on a Linux PC of the domain |

@@ -119,6 +119,14 @@ sudo kadmin.local -q "delprinc -force padme.amidala"
 New Unix ids are handed out above the highest one in the directory: the
 id of a deleted account comes back only if it was the highest.
 
+## Computers
+
+The workstations are managed in the console as well, under **Computers**,
+with the same delegation: `dvador` manages the Galactic Empire's computers.
+Creating, disabling and deleting a computer reaches the KDC within 30
+seconds; resetting its password gives the one-time password a machine joins
+with. See [computers](computers.md).
+
 ## Organizations and groups
 
 Organizations are created, edited and deleted in the console; accounts and

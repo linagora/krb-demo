@@ -83,7 +83,8 @@
   changed_when: true
 
 # Kerberos: the realm, and the machine's own principal. Its key lets sssd
-# check that the tickets it gets come from the real KDC.
+# check that the tickets it gets come from the real KDC; the domain
+# controller disables it with the computer, which stops every login here.
 
 - name: Write the Kerberos configuration
   ansible.builtin.template:
@@ -91,46 +92,95 @@
     dest: /etc/krb5.conf
     mode: "0644"
 
-- name: List the principals
-  ansible.builtin.command: kadmin.local -q listprincs
+- name: Install the join command
+  ansible.builtin.template:
+    src: star-wars-join.j2
+    dest: /usr/local/sbin/star-wars-join
+    mode: "0755"
+
+# The computer in the directory: the console shows it, and the domain
+# controller keeps its principal in step with it. Left alone once there.
+- name: Declare the computer in the directory
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "{{ sw_computer_dn }}"
+    objectClass: [top, device, twakeWhitePages, demoWorkstation]
+    attributes:
+      description: Joined by Ansible
+      twakeDepartmentLink: "{{ sw_workstation_org_dn }}"
+      twakeDepartmentPath: "{{ sw_workstation_organization or 'organization' }}"
+      twakeAccountStatus: "cn=active,ou=twakeAccountStatus,ou=nomenclature,{{ sw_ldap_base }}"
+      # Set by the reconciler too, but the join password comes before it runs.
+      pwdPolicySubentry: "cn=computer,ou=policies,{{ sw_ldap_base }}"
   delegate_to: "{{ sw_dc }}"
-  register: sw_krb_listprincs
+
+# Machines joined before the computers role have an unmarked principal, which
+# the domain controller would neither disable nor delete with the computer.
+- name: Read the machine's principal
+  ansible.builtin.command: kadmin.local -q "getprinc {{ sw_host_principal }}"
+  delegate_to: "{{ sw_dc }}"
+  register: sw_host_princ
   changed_when: false
 
-- name: Create the machine's principal
-  ansible.builtin.command: kadmin.local -q "addprinc -randkey {{ sw_host_principal }}"
+- name: Hand the machine's principal over to the console
+  ansible.builtin.command: kadmin.local -q "modprinc -policy {{ sw_computer_krb_policy }} {{ sw_host_principal }}"
   delegate_to: "{{ sw_dc }}"
-  when: sw_host_principal not in sw_krb_listprincs.stdout_lines
+  when:
+    - "'Principal: ' in sw_host_princ.stdout"
+    - "('Policy: ' ~ sw_computer_krb_policy) not in sw_host_princ.stdout"
   changed_when: true
 
-- name: Create the directory of the machines' keytabs
-  ansible.builtin.file:
-    path: "{{ sw_etc }}/krb/hosts"
-    state: directory
-    mode: "0700"
+- name: Read the computer's state
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -o ldif-wrap=no -Y EXTERNAL -H ldapi:/// -b {{ sw_computer_dn }} -s base twakeAccountStatus
   delegate_to: "{{ sw_dc }}"
+  register: sw_computer_state
+  changed_when: false
 
-# ktadd draws a new key: kept on the domain controller, the keytab survives a
-# reinstallation of the machine.
-- name: Export the machine's keytab
-  ansible.builtin.command:
-    cmd: kadmin.local -q "ktadd -k {{ sw_etc }}/krb/hosts/{{ sw_workstation_fqdn }}.keytab {{ sw_host_principal }}"
-    creates: "{{ sw_etc }}/krb/hosts/{{ sw_workstation_fqdn }}.keytab"
-  delegate_to: "{{ sw_dc }}"
+- name: Check the machine's key against the KDC
+  ansible.builtin.command: kinit -k -c MEMORY:join {{ sw_host_principal }}
+  register: sw_joined
+  changed_when: false
+  failed_when: false
 
-- name: Fetch the machine's keytab
-  ansible.builtin.fetch:
-    src: "{{ sw_etc }}/krb/hosts/{{ sw_workstation_fqdn }}.keytab"
-    dest: "{{ sw_secrets_dir }}/keytabs/{{ sw_workstation_fqdn }}.keytab"
-    flat: true
-  delegate_to: "{{ sw_dc }}"
+# Its key is refused because an administrator disabled it: joining again
+# would be refused too, and is not the playbook's call.
+- name: Leave a disabled computer alone
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} is disabled in the console: not joined again."
+  when:
+    - sw_joined.rc != 0
+    - "'cn=active,' not in sw_computer_state.stdout"
 
-- name: Install the machine's keytab
-  ansible.builtin.copy:
-    src: "{{ sw_secrets_dir }}/keytabs/{{ sw_workstation_fqdn }}.keytab"
-    dest: /etc/krb5.keytab
-    mode: "0600"
-  notify: Restart sssd
+# Joining as anyone would: a one-time password on the computer, then the join
+# command, which trades it for the keytab.
+- name: Join the domain
+  when:
+    - sw_joined.rc != 0
+    - "'cn=active,' in sw_computer_state.stdout"
+  block:
+    - name: Draw a one-time join password
+      ansible.builtin.set_fact:
+        sw_join_password: "{{ lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=32) }}"
+      no_log: true
+
+    - name: Set it on the computer
+      ansible.builtin.command:
+        cmd: ldappasswd -Q -Y EXTERNAL -H ldapi:/// -T /dev/stdin {{ sw_computer_dn }}
+        stdin: "{{ sw_join_password }}"
+        stdin_add_newline: false
+      delegate_to: "{{ sw_dc }}"
+      changed_when: true
+      no_log: true
+
+    - name: Join with it
+      ansible.builtin.command: /usr/local/sbin/star-wars-join {{ inventory_hostname }}
+      environment:
+        STAR_WARS_JOIN_PASSWORD: "{{ sw_join_password }}"
+      changed_when: true
+      no_log: true
+      notify: Restart sssd
 
 # Identities from the directory, passwords from the KDC.
 
