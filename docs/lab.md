@@ -43,12 +43,30 @@ password = login, and open Firefox. Without a graphical session (or with
 | `lab/lab.sh deploy [ansible args]` | Runs the playbook with `lab/inventory.yml` |
 | `lab/lab.sh ssh dc\|pc1 [command]` | SSH as `debian` (sudo without password) |
 | `lab/lab.sh screenshot pc1 shot.png` | Saves pc1's screen |
+| `lab/check.sh` | Runs the end-to-end checks (see below) |
 | `lab/lab.sh status` | Tells which VMs run |
 | `lab/lab.sh down` | Shuts the VMs down; `up` starts them again |
 | `lab/lab.sh destroy` | Deletes the VMs; the cloud image stays |
 
 Everything lives in `~/.cache/krb-demo-lab` (or `$LAB_DIR`): the cloud
 image, the lab's SSH key, the VM disks and logs.
+
+## Checking the lab
+
+`lab/check.sh` replays, through SSH to the VMs, what a user and an
+administrator do, and prints one line per check:
+
+- the services run, and pc1's sssd is online;
+- yoda and dvador sign in to the console through the SSO, with the rights
+  of their organizations, and a wrong password is refused;
+- pc1 knows the accounts, its key is valid, `kinit` works, and hsolo logs
+  in on pc1 with a ticket;
+- a computer goes through its life: created, its principal appears, its
+  one-time password gets its keytab once, then it is deleted with its
+  principal.
+
+It assumes the demo passwords (password = login), leaves the directory as
+it found it, and exits with the number of failures.
 
 ## Using the services from your own browser
 
