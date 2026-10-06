@@ -1,0 +1,54 @@
+# Organizations: name, parent path (empty under the top organization) and the
+# uid of their local administrator.
+sw_organizations:
+  - { name: Jedi Order, parent: "", admin: okenobi }
+  - { name: Rebel Alliance, parent: "", admin: lorgana }
+  - { name: Rogue Squadron, parent: Rebel Alliance, admin: wantilles }
+  - { name: Galactic Empire, parent: "", admin: dvador }
+  - { name: Imperial Navy, parent: Galactic Empire, admin: wtarkin }
+  - { name: Outer Rim, parent: "", admin: lcalrissian }
+
+# Administers the whole directory: named on the top organization.
+sw_global_admin: yoda
+
+sw_positions:
+  - Grand Master
+  - Jedi Master
+  - Jedi Knight
+  - General
+  - Pilot
+  - Smuggler
+  - Co-pilot
+  - Baron Administrator
+  - Sith Lord
+  - Emperor
+  - Grand Moff
+  - Bounty Hunter
+  - Protocol Droid
+  - Astromech Droid
+
+# org is the organization path ("Parent / Child").
+sw_users:
+  - { uid: yoda, givenName: Yoda, sn: Yoda, org: Jedi Order, position: Grand Master }
+  - { uid: okenobi, givenName: Obi-Wan, sn: Kenobi, org: Jedi Order, position: Jedi Master }
+  - { uid: lskywalker, givenName: Luke, sn: Skywalker, org: Rebel Alliance / Rogue Squadron, position: Jedi Knight }
+  - { uid: lorgana, givenName: Leia, sn: Organa, org: Rebel Alliance, position: General }
+  - { uid: wantilles, givenName: Wedge, sn: Antilles, org: Rebel Alliance / Rogue Squadron, position: Pilot }
+  - { uid: c3po, givenName: C-3PO, sn: C-3PO, org: Rebel Alliance, position: Protocol Droid }
+  - { uid: r2d2, givenName: R2-D2, sn: R2-D2, org: Rebel Alliance, position: Astromech Droid }
+  - { uid: hsolo, givenName: Han, sn: Solo, org: Outer Rim, position: Smuggler }
+  - { uid: chewbacca, givenName: Chewbacca, sn: Chewbacca, org: Outer Rim, position: Co-pilot }
+  - { uid: lcalrissian, givenName: Lando, sn: Calrissian, org: Outer Rim, position: Baron Administrator }
+  - { uid: bfett, givenName: Boba, sn: Fett, org: Outer Rim, position: Bounty Hunter }
+  - { uid: dvador, givenName: Dark, sn: Vador, org: Galactic Empire, position: Sith Lord }
+  - { uid: spalpatine, givenName: Sheev, sn: Palpatine, org: Galactic Empire, position: Emperor }
+  - { uid: wtarkin, givenName: Wilhuff, sn: Tarkin, org: Galactic Empire / Imperial Navy, position: Grand Moff }
+
+# jedi-council opens the LemonLDAP::NG manager.
+sw_groups:
+  - { cn: jedi-council, org: Jedi Order, members: [yoda, okenobi] }
+  - { cn: jedi, org: Jedi Order, members: [yoda, okenobi, lskywalker] }
+  - { cn: rebels, org: Rebel Alliance, members: [lorgana, lskywalker, wantilles, hsolo, chewbacca, lcalrissian, c3po, r2d2] }
+  - { cn: millennium-falcon, org: Outer Rim, members: [hsolo, chewbacca] }
+  - { cn: sith, org: Galactic Empire, members: [dvador, spalpatine] }
+  - { cn: death-star, org: Galactic Empire / Imperial Navy, members: [wtarkin, dvador] }

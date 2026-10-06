@@ -1,0 +1,22 @@
+# Inventory of the lab VMs (lab/lab.sh up, then lab/lab.sh deploy).
+all:
+  vars:
+    ansible_host: 127.0.0.1
+    ansible_user: debian
+    ansible_become: true
+    ansible_ssh_private_key_file: "{{ lookup('env', 'LAB_DIR') or (lookup('env', 'HOME') ~ '/.cache/krb-demo-lab') }}/id_lab"
+    ansible_ssh_common_args: -o IdentitiesOnly=yes -o IdentityAgent=none -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+  children:
+    domain_controller:
+      hosts:
+        dc:
+          ansible_port: 2222
+          # The services answer on the private network. Host variables, as
+          # group ones would lose to group_vars/all.yml.
+          sw_dc_address: 10.10.0.1
+    workstations:
+      hosts:
+        pc1:
+          ansible_port: 2223
+          sw_dc_address: 10.10.0.1
+          sw_workstation_address: 10.10.0.21

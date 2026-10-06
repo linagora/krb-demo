@@ -1,0 +1,143 @@
+# Entries are created when missing and left alone afterwards: what the console
+# changes stays changed on the next run.
+
+- name: Create the branches
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "ou={{ item }},{{ sw_ldap_base }}"
+    objectClass: organizationalUnit
+  loop: [users, groups, positions, nomenclature, trash]
+
+- name: Create the nomenclature branches
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "ou={{ item }},{{ sw_nomenclature }}"
+    objectClass: organizationalUnit
+  loop: "{{ sw_nomenclature_values.keys() | list + ['domains'] }}"
+
+- name: Fill the nomenclatures
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "cn={{ item.1 }},ou={{ item.0.key }},{{ sw_nomenclature }}"
+    objectClass: [top, applicationProcess]
+  loop: "{{ sw_nomenclature_values | dict2items | subelements('value') }}"
+  loop_control:
+    label: "{{ item.0.key }}: {{ item.1 }}"
+
+- name: Declare the mail domain
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "dc={{ sw_domain.split('.') | first }},ou=domains,{{ sw_nomenclature }}"
+    objectClass: [top, domain, domainRelatedObject]
+    attributes:
+      associatedDomain: "{{ sw_domain }}"
+
+- name: Create the positions
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "cn={{ item }},ou=positions,{{ sw_ldap_base }}"
+    objectClass: [top, twakePosition]
+  loop: "{{ sw_positions }}"
+
+- name: Create the top organization
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "{{ sw_top_org }}"
+    objectClass: [top, organizationalUnit, twakeDepartment]
+    attributes:
+      description: "{{ sw_organization }}"
+      twakeDepartmentPath: organization
+      twakeLocalAdminLink: "uid={{ sw_global_admin }},ou=users,{{ sw_ldap_base }}"
+
+# Parents come before their children in sw_organizations.
+- name: Create the organizations
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "{{ sw_org_dn }}"
+    objectClass: [top, organizationalUnit, twakeDepartment]
+    attributes:
+      twakeDepartmentPath: "{{ (item.parent ~ ' / ' ~ item.name) if item.parent else item.name }}"
+      twakeLocalAdminLink: "uid={{ item.admin }},ou=users,{{ sw_ldap_base }}"
+  vars:
+    sw_org_dn: >-
+      {{ (['ou=' ~ item.name] + ((item.parent.split(' / ') | reverse | map('regex_replace', '^', 'ou=') | list) if item.parent else []) + [sw_top_org]) | join(',') }}
+  loop: "{{ sw_organizations }}"
+  loop_control:
+    label: "{{ sw_org_dn }}"
+
+# A user the console moved (to the trash, say) keeps its uid: creating it
+# again would make the uid ambiguous, and the console refuses those.
+- name: List the uids already in the directory
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -o ldif-wrap=no -Y EXTERNAL -H ldapi:///
+    -b {{ sw_ldap_base }} (uid=*) uid
+  register: sw_existing_uids
+  changed_when: false
+
+- name: Create the users
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "uid={{ item.0.uid }},ou=users,{{ sw_ldap_base }}"
+    objectClass: [top, twakeAccount, twakeWhitePages]
+    attributes:
+      uid: "{{ item.0.uid }}"
+      cn: "{{ sw_cn }}"
+      displayName: "{{ sw_cn }}"
+      givenName: "{{ item.0.givenName }}"
+      sn: "{{ item.0.sn }}"
+      mail: "{{ item.0.uid }}@{{ sw_domain }}"
+      employeeNumber: "SW-{{ '%04d' | format(item.1 + 1) }}"
+      title: "cn={{ item.0.position }},ou=positions,{{ sw_ldap_base }}"
+      twakeDepartmentLink: "{{ (item.0.org.split(' / ') | reverse | map('regex_replace', '^', 'ou=') | list + [sw_top_org]) | join(',') }}"
+      twakeDepartmentPath: "{{ item.0.org }}"
+      twakeAccountStatus: "{{ sw_status_active }}"
+      twakeDeliveryMode: "{{ sw_delivery_normal }}"
+      userPassword: "{{ sw_demo_password or item.0.uid }}"
+  vars:
+    sw_cn: "{{ item.0.givenName if item.0.givenName == item.0.sn else item.0.givenName ~ ' ' ~ item.0.sn }}"
+  loop: "{{ sw_users | zip(range(sw_users | length)) | list }}"
+  loop_control:
+    label: "{{ item.0.uid }}"
+  when: >-
+    ("uid: " ~ item.0.uid) not in sw_existing_uids.stdout_lines
+  no_log: "{{ sw_demo_password | length > 0 }}"
+
+- name: Create the groups
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "cn={{ item.cn }},ou=groups,{{ sw_ldap_base }}"
+    objectClass: [top, groupOfNames, twakeStaticGroup]
+    attributes:
+      member: "{{ item.members | map('regex_replace', '^(.*)$', 'uid=\\1,ou=users,' ~ sw_ldap_base) | list }}"
+      twakeDepartmentLink: "{{ (item.org.split(' / ') | reverse | map('regex_replace', '^', 'ou=') | list + [sw_top_org]) | join(',') }}"
+      twakeDepartmentPath: "{{ item.org }}"
+  loop: "{{ sw_groups }}"
+  loop_control:
+    label: "{{ item.cn }}"
+
+# So that kinit works before a first SSO login; afterwards LemonLDAP::NG keeps
+# the key in step with the LDAP password at each login.
+- name: List the Kerberos principals
+  ansible.builtin.command: kadmin.local -q listprincs
+  register: sw_krb_principals
+  changed_when: false
+
+- name: Create the users' Kerberos principals
+  ansible.builtin.command:
+    cmd: kadmin.local
+    stdin: "addprinc -pw {{ sw_demo_password or item.uid }} {{ item.uid }}"
+  loop: "{{ sw_users }}"
+  loop_control:
+    label: "{{ item.uid }}"
+  when: (item.uid ~ '@' ~ sw_realm) not in sw_krb_principals.stdout_lines
+  changed_when: true
+  no_log: "{{ sw_demo_password | length > 0 }}"

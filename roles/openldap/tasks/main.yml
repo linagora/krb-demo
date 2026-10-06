@@ -1,0 +1,310 @@
+- name: List the installed packages
+  ansible.builtin.package_facts:
+
+# Preseeding matters at installation only, and slapd's postinst clears the
+# passwords afterwards.
+- name: Preseed slapd
+  ansible.builtin.debconf:
+    name: slapd
+    question: "{{ item.q }}"
+    vtype: "{{ item.t }}"
+    value: "{{ item.v }}"
+  loop:
+    - { q: slapd/no_configuration, t: boolean, v: "false" }
+    - { q: slapd/domain, t: string, v: "{{ sw_domain }}" }
+    - { q: shared/organization, t: string, v: "{{ sw_organization }}" }
+    - { q: slapd/password1, t: password, v: "{{ sw_ldap_admin_password }}" }
+    - { q: slapd/password2, t: password, v: "{{ sw_ldap_admin_password }}" }
+    - { q: slapd/purge_database, t: boolean, v: "true" }
+    - { q: slapd/move_old_database, t: boolean, v: "true" }
+  loop_control:
+    label: "{{ item.q }}"
+  when: "'slapd' not in ansible_facts.packages"
+  no_log: true
+
+- name: Install slapd
+  ansible.builtin.apt:
+    name: [slapd, ldap-utils]
+
+- name: Read the suffix of the main database
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b olcDatabase={1}mdb,cn=config
+    -s base olcSuffix
+  register: sw_ldap_suffix
+  changed_when: false
+  failed_when: false
+
+- name: The main database holds the demo suffix
+  ansible.builtin.assert:
+    that: "('olcSuffix: ' ~ sw_ldap_base) in sw_ldap_suffix.stdout"
+    fail_msg: >-
+      slapd was installed before with another suffix. Run
+      "dpkg-reconfigure slapd" or purge it, then run the playbook again.
+
+- name: Copy the Twake schemas
+  ansible.builtin.copy:
+    src: "{{ item }}.ldif"
+    dest: "/etc/ldap/schema/{{ item }}.ldif"
+    mode: "0644"
+  loop: [mail, twake]
+
+- name: List the loaded schemas
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b cn=schema,cn=config -s one cn
+  register: sw_ldap_schemas
+  changed_when: false
+
+# In order: twake.ldif uses attributes mail.ldif defines.
+- name: Load the Twake schemas
+  ansible.builtin.command: "ldapadd -Q -Y EXTERNAL -H ldapi:/// -f /etc/ldap/schema/{{ item }}.ldif"
+  loop: [mail, twake]
+  when: ("}" ~ item ~ "\n") not in (sw_ldap_schemas.stdout ~ "\n")
+  changed_when: true
+
+- name: List the loaded modules
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b cn=config
+    (objectClass=olcModuleList) olcModuleLoad
+  register: sw_ldap_loaded_modules
+  changed_when: false
+
+- name: Load the overlay modules
+  ansible.builtin.command:
+    cmd: ldapmodify -Q -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: cn=module{0},cn=config
+      changetype: modify
+      add: olcModuleLoad
+      olcModuleLoad: {{ item }}
+  loop: "{{ sw_ldap_modules }}"
+  when: ("}" ~ item ~ "\n") not in (sw_ldap_loaded_modules.stdout ~ "\n")
+  changed_when: true
+
+- name: List the overlays of the main database
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:///
+    -b olcDatabase={1}mdb,cn=config -s one olcOverlay
+  register: sw_ldap_overlays
+  changed_when: false
+
+# ppolicy hashes the cleartext passwords ldap-rest writes, and keeps
+# pwdReset and pwdChangedTime, which the console's account lifecycle reads.
+# unique on uid: the console finds the signed-in user by uid, and refuses an
+# ambiguous one.
+- name: Add the overlays
+  ansible.builtin.command:
+    cmd: ldapadd -Q -Y EXTERNAL -H ldapi:///
+    stdin: "{{ item.ldif }}"
+  loop:
+    - name: ppolicy
+      ldif: |
+        dn: olcOverlay=ppolicy,olcDatabase={1}mdb,cn=config
+        objectClass: olcOverlayConfig
+        objectClass: olcPPolicyConfig
+        olcOverlay: ppolicy
+        olcPPolicyDefault: cn=default,ou=policies,{{ sw_ldap_base }}
+        olcPPolicyHashCleartext: TRUE
+        olcPPolicyUseLockout: TRUE
+    - name: memberof
+      ldif: |
+        dn: olcOverlay=memberof,olcDatabase={1}mdb,cn=config
+        objectClass: olcOverlayConfig
+        objectClass: olcMemberOf
+        olcOverlay: memberof
+        olcMemberOfGroupOC: groupOfNames
+        olcMemberOfMemberAD: member
+        olcMemberOfMemberOfAD: memberOf
+        olcMemberOfRefInt: TRUE
+        olcMemberOfDangling: ignore
+    - name: refint
+      ldif: |
+        dn: olcOverlay=refint,olcDatabase={1}mdb,cn=config
+        objectClass: olcOverlayConfig
+        objectClass: olcRefintConfig
+        olcOverlay: refint
+        olcRefintAttribute: member owner twakeLocalAdminLink twakeManagerLink
+    - name: unique
+      ldif: |
+        dn: olcOverlay=unique,olcDatabase={1}mdb,cn=config
+        objectClass: olcOverlayConfig
+        objectClass: olcUniqueConfig
+        olcOverlay: unique
+        olcUniqueURI: ldap:///ou=users,{{ sw_ldap_base }}?uid?sub
+        olcUniqueURI: ldap:///{{ sw_ldap_base }}?uidNumber?sub
+  loop_control:
+    label: "{{ item.name }}"
+  when: ("}" ~ item.name ~ "\n") not in (sw_ldap_overlays.stdout ~ "\n")
+  changed_when: true
+
+# StartTLS with the domain's certificate: workstations (sssd) refuse to send
+# their bind password in the clear.
+- name: Create slapd's TLS directory
+  ansible.builtin.file:
+    path: /etc/ldap/tls
+    state: directory
+    owner: root
+    group: openldap
+    mode: "0750"
+
+- name: Give slapd the domain certificate
+  ansible.builtin.copy:
+    src: "{{ sw_etc }}/pki/{{ item.name }}"
+    dest: "/etc/ldap/tls/{{ item.name }}"
+    remote_src: true
+    owner: root
+    group: openldap
+    mode: "{{ item.mode }}"
+  loop:
+    - { name: ca.crt, mode: "0644" }
+    - { name: server.crt, mode: "0644" }
+    - { name: server.key, mode: "0640" }
+  notify: Restart slapd
+
+- name: Read slapd's TLS settings
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -o ldif-wrap=no -Y EXTERNAL -H ldapi:/// -b cn=config -s base
+    olcTLSCertificateFile olcTLSCertificateKeyFile olcTLSCACertificateFile
+  register: sw_ldap_tls
+  changed_when: false
+
+- name: Turn StartTLS on
+  ansible.builtin.command:
+    cmd: ldapmodify -Q -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: cn=config
+      changetype: modify
+      replace: olcTLSCACertificateFile
+      olcTLSCACertificateFile: /etc/ldap/tls/ca.crt
+      -
+      replace: olcTLSCertificateFile
+      olcTLSCertificateFile: /etc/ldap/tls/server.crt
+      -
+      replace: olcTLSCertificateKeyFile
+      olcTLSCertificateKeyFile: /etc/ldap/tls/server.key
+  when: "'olcTLSCertificateKeyFile: /etc/ldap/tls/server.key' not in sw_ldap_tls.stdout"
+  changed_when: true
+
+# Directories set up before uidNumber was added to the unique overlay.
+- name: Read the uniqueness rules
+  ansible.builtin.command: >-
+    ldapsearch -LLL -Q -o ldif-wrap=no -Y EXTERNAL -H ldapi:///
+    -b olcDatabase={1}mdb,cn=config -s one (objectClass=olcUniqueConfig) olcUniqueURI
+  register: sw_ldap_unique
+  changed_when: false
+
+- name: Keep uidNumbers unique
+  ansible.builtin.command:
+    cmd: ldapmodify -Q -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ sw_ldap_unique.stdout_lines[0] | regex_replace('^dn: ', '') }}
+      changetype: modify
+      add: olcUniqueURI
+      olcUniqueURI: ldap:///{{ sw_ldap_base }}?uidNumber?sub
+  when: "'?uidNumber?sub' not in sw_ldap_unique.stdout"
+  changed_when: true
+
+- name: Write the database settings
+  ansible.builtin.template:
+    src: database.ldif.j2
+    dest: "{{ sw_etc }}/ldap-database.ldif"
+    mode: "0600"
+
+# Applied on every run, whatever the file did: slapd normalizes ACLs, so the
+# live values are compared before and after rather than with the file.
+- name: Apply the database settings
+  ansible.builtin.shell: |
+    set -e
+    read_settings() {
+      ldapsearch -LLL -Q -o ldif-wrap=no -Y EXTERNAL -H ldapi:/// \
+        -b 'olcDatabase={1}mdb,cn=config' -s base olcAccess olcDbIndex olcLimits
+    }
+    before=$(read_settings)
+    ldapmodify -Q -Y EXTERNAL -H ldapi:/// -f {{ sw_etc }}/ldap-database.ldif >/dev/null
+    [ "$before" = "$(read_settings)" ] || echo changed
+  register: sw_ldap_database
+  changed_when: "'changed' in sw_ldap_database.stdout"
+
+- name: Create the structure the services need
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "{{ item.dn }}"
+    objectClass: "{{ item.objectClass }}"
+    attributes: "{{ item.attributes }}"
+  loop:
+    - dn: "ou=applicative,{{ sw_ldap_base }}"
+      objectClass: organizationalUnit
+      attributes: { description: Service accounts }
+    - dn: "ou=policies,{{ sw_ldap_base }}"
+      objectClass: organizationalUnit
+      attributes: { description: Password policies }
+    - dn: "cn=default,ou=policies,{{ sw_ldap_base }}"
+      objectClass: [applicationProcess, pwdPolicy]
+      attributes:
+        pwdAttribute: userPassword
+        pwdAllowUserChange: "TRUE"
+        pwdMustChange: "TRUE"
+        pwdLockout: "TRUE"
+        pwdMaxFailure: "10"
+        pwdLockoutDuration: "300"
+        pwdFailureCountInterval: "300"
+    # Service accounts: no lockout anyone reaching port 389 could trigger.
+    - dn: "cn=service,ou=policies,{{ sw_ldap_base }}"
+      objectClass: [applicationProcess, pwdPolicy]
+      attributes:
+        pwdAttribute: userPassword
+        pwdLockout: "FALSE"
+        pwdMustChange: "FALSE"
+  loop_control:
+    label: "{{ item.dn }}"
+
+- name: Create the service accounts
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "{{ item.dn }}"
+    objectClass: [applicationProcess, simpleSecurityObject]
+    attributes:
+      description: "{{ item.description }}"
+      userPassword: "{{ item.password }}"
+  loop: "{{ sw_ldap_service_accounts }}"
+  no_log: true
+
+- name: Put the service accounts under the service policy
+  community.general.ldap_attrs:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "{{ item }}"
+    attributes:
+      pwdPolicySubentry: "cn=service,ou=policies,{{ sw_ldap_base }}"
+    state: exact
+  loop: "{{ sw_ldap_service_accounts | map(attribute='dn') }}"
+
+# The secrets live on the controller: a run from another checkout brings new
+# ones, which the existing accounts must take.
+- name: Check the service accounts' passwords
+  ansible.builtin.command:
+    cmd: ldapwhoami -x -H ldapi:/// -D {{ item.dn }} -y /dev/stdin
+    stdin: "{{ item.password }}"
+    stdin_add_newline: false
+  loop: "{{ sw_ldap_service_accounts }}"
+  register: sw_ldap_service_binds
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Reset the passwords that do not match
+  ansible.builtin.command:
+    cmd: ldappasswd -Q -Y EXTERNAL -H ldapi:/// -T /dev/stdin {{ item.item.dn }}
+    stdin: "{{ item.item.password }}"
+    stdin_add_newline: false
+  loop: "{{ sw_ldap_service_binds.results }}"
+  when: item.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Start slapd
+  ansible.builtin.service:
+    name: slapd
+    state: started
+    enabled: true

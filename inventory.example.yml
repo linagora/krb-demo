@@ -1,0 +1,19 @@
+# Copy to inventory.yml. Every machine is a fresh Debian 13.
+all:
+  children:
+    # Exactly one: directory, KDC, SSO and console.
+    domain_controller:
+      hosts:
+        dc:
+          ansible_host: 192.0.2.10
+          ansible_user: debian
+          ansible_become: true
+    # Optional: Linux PCs joined to the domain (see docs/workstation.md).
+    workstations:
+      hosts:
+        pc1:
+          ansible_host: 192.0.2.21
+          ansible_user: debian
+          ansible_become: true
+          # false: no desktop, command line only.
+          sw_workstation_desktop: true

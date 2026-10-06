@@ -1,0 +1,12 @@
+sw_top_org: "ou=organization,{{ sw_ldap_base }}"
+sw_nomenclature: "ou=nomenclature,{{ sw_ldap_base }}"
+sw_status_active: "cn=active,ou=twakeAccountStatus,{{ sw_nomenclature }}"
+sw_delivery_normal: "cn=normal,ou=twakeDeliveryMode,{{ sw_nomenclature }}"
+
+# Nomenclature values the console fills its selects with.
+sw_nomenclature_values:
+  twakeAccountStatus: [active, disabled, noaccess, todelete]
+  twakeDeliveryMode: [normal, localDelivery]
+  twakeTitle: [Master, Lord, General, Captain, Admiral]
+  twakeListType: [openList, memberRestrictedList]
+  twakeMailboxType: [group, mailingList, teamMailbox]

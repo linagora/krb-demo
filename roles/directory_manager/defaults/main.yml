@@ -1,0 +1,13 @@
+sw_tdm_env:
+  DM_LDAP_URL: "ldap://{{ sw_fqdn }}"
+  DM_LDAP_DN: "{{ sw_ldap_tdm_dn }}"
+  DM_LDAP_PWD: "{{ sw_ldap_tdm_password }}"
+  DM_LDAP_BASE: "{{ sw_ldap_base }}"
+  DM_LDAP_TOP_ORGANIZATION: "ou=organization,{{ sw_ldap_base }}"
+  DM_LDAP_GROUP_BASE: "ou=groups,{{ sw_ldap_base }}"
+  DM_OIDC_SERVER: "https://{{ sw_portal_host }}"
+  DM_OIDC_CLIENT_ID: "{{ sw_oidc_client_id }}"
+  DM_OIDC_CLIENT_SECRET: "{{ sw_oidc_client_secret }}"
+  DM_BASE_URL: "https://{{ sw_directory_host }}"
+  # The provider's certificate comes from the demo CA.
+  NODE_EXTRA_CA_CERTS: /etc/ssl/star-wars-demo-ca.crt

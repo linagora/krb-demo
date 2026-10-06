@@ -1,0 +1,37 @@
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+
+- name: Write the virtual hosts
+  ansible.builtin.template:
+    src: star-wars.conf.j2
+    dest: /etc/nginx/sites-available/star-wars.conf
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Enable the virtual hosts
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/star-wars.conf
+    dest: /etc/nginx/sites-enabled/star-wars.conf
+    state: link
+  notify: Reload nginx
+
+- name: Disable the default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Start nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+# The containers' checks go through these virtual hosts.
+- name: Check the nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Apply the virtual hosts now
+  ansible.builtin.meta: flush_handlers

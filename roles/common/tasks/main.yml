@@ -1,0 +1,133 @@
+- name: Debian 13 only
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version == '13'
+    fail_msg: This playbook targets Debian 13 (trixie).
+
+- name: Set the host name
+  ansible.builtin.hostname:
+    name: "{{ sw_hostname }}"
+
+# One line per name: the first name of a line is the canonical one, and
+# browsers ask for a Kerberos ticket for the canonical name.
+- name: Resolve the demo names locally
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} star wars demo"
+    block: |
+      {{ sw_dc_address }} {{ sw_fqdn }} {{ sw_hostname }}
+      {{ sw_dc_address }} {{ sw_portal_host }}
+      {{ sw_dc_address }} {{ sw_manager_host }}
+      {{ sw_dc_address }} {{ sw_directory_host }}
+
+# cloud-init rewrites /etc/hosts at boot on cloud images.
+- name: Keep the demo names in cloud-init's hosts template
+  ansible.builtin.blockinfile:
+    path: /etc/cloud/templates/hosts.debian.tmpl
+    marker: "# {mark} star wars demo"
+    block: |
+      {{ sw_dc_address }} {{ sw_fqdn }} {{ sw_hostname }}
+      {{ sw_dc_address }} {{ sw_portal_host }}
+      {{ sw_dc_address }} {{ sw_manager_host }}
+      {{ sw_dc_address }} {{ sw_directory_host }}
+  failed_when: false
+
+- name: Install the common packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - debconf-utils
+      - docker.io
+      - python3-cryptography
+      - python3-docker
+      - python3-ldap
+      - jq
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the configuration directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ sw_etc }}"
+    - "{{ sw_etc }}/pki"
+
+- name: Create the demo CA key
+  community.crypto.openssl_privatekey:
+    path: "{{ sw_etc }}/pki/ca.key"
+    mode: "0600"
+
+- name: Create the demo CA CSR
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: "{{ sw_etc }}/pki/ca.key"
+    common_name: "{{ sw_organization }} demo CA"
+    basic_constraints: ["CA:TRUE"]
+    basic_constraints_critical: true
+    key_usage: [keyCertSign, cRLSign]
+    key_usage_critical: true
+  register: sw_ca_csr
+  changed_when: false
+
+- name: Self-sign the demo CA
+  community.crypto.x509_certificate:
+    path: "{{ sw_etc }}/pki/ca.crt"
+    csr_content: "{{ sw_ca_csr.csr }}"
+    privatekey_path: "{{ sw_etc }}/pki/ca.key"
+    provider: selfsigned
+    selfsigned_not_after: "+3650d"
+    mode: "0644"
+
+- name: Create the server key
+  community.crypto.openssl_privatekey:
+    path: "{{ sw_etc }}/pki/server.key"
+    mode: "0600"
+
+- name: Create the server CSR
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: "{{ sw_etc }}/pki/server.key"
+    common_name: "{{ sw_fqdn }}"
+    subject_alt_name:
+      - "DNS:{{ sw_fqdn }}"
+      - "DNS:{{ sw_portal_host }}"
+      - "DNS:{{ sw_manager_host }}"
+      - "DNS:{{ sw_directory_host }}"
+  register: sw_server_csr
+  changed_when: false
+
+- name: Sign the server certificate
+  community.crypto.x509_certificate:
+    path: "{{ sw_etc }}/pki/server.crt"
+    csr_content: "{{ sw_server_csr.csr }}"
+    provider: ownca
+    ownca_path: "{{ sw_etc }}/pki/ca.crt"
+    ownca_privatekey_path: "{{ sw_etc }}/pki/ca.key"
+    ownca_not_after: "+825d"
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Trust the demo CA on the machine
+  ansible.builtin.copy:
+    src: "{{ sw_etc }}/pki/ca.crt"
+    dest: /usr/local/share/ca-certificates/star-wars-demo-ca.crt
+    remote_src: true
+    mode: "0644"
+  register: sw_ca_trust
+
+- name: Look for the demo CA in the trust store
+  ansible.builtin.stat:
+    path: /etc/ssl/certs/star-wars-demo-ca.pem
+  register: sw_ca_trusted
+
+- name: Update the trust store
+  ansible.builtin.command: update-ca-certificates
+  when: sw_ca_trust.changed or not sw_ca_trusted.stat.exists
+  changed_when: true
+
+- name: Start Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true

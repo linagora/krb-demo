@@ -1,0 +1,6 @@
+sw_llng_over: "{{ sw_etc }}/llng/over"
+sw_ldap_active_filter: >-
+  (&(uid=$user)(objectClass=twakeAccount)(twakeAccountStatus=cn=active,ou=twakeAccountStatus,ou=nomenclature,{{ sw_ldap_base }}))
+
+# Extra keys laid over llng-conf.yml.j2, top-level keys replacing its own.
+sw_llng_extra_conf: {}

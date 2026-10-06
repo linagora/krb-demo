@@ -1,0 +1,92 @@
+- name: Create the overlay directory
+  ansible.builtin.file:
+    path: "{{ sw_llng_over }}"
+    state: directory
+    owner: root
+    group: "33"
+    mode: "0750"
+
+- name: Create the OpenID Connect signing key
+  community.crypto.openssl_privatekey:
+    path: "{{ sw_etc }}/llng/oidc-sig.key"
+    size: 2048
+    mode: "0600"
+
+- name: Derive its public key
+  community.crypto.openssl_publickey:
+    path: "{{ sw_etc }}/llng/oidc-sig.pub"
+    privatekey_path: "{{ sw_etc }}/llng/oidc-sig.key"
+    mode: "0644"
+
+- name: Read the signing keys
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - "{{ sw_etc }}/llng/oidc-sig.key"
+    - "{{ sw_etc }}/llng/oidc-sig.pub"
+  register: sw_oidc_keys
+  no_log: true
+
+- name: Write the overlaid configuration
+  ansible.builtin.copy:
+    dest: "{{ sw_llng_over }}/{{ item.key }}"
+    content: "{{ (item.value | to_json) if item.value is mapping else item.value }}"
+    owner: root
+    group: "33"
+    mode: "0640"
+  loop: >-
+    {{ lookup('ansible.builtin.template', 'llng-conf.yml.j2') | from_yaml
+       | combine(sw_llng_extra_conf) | combine({
+         'oidcServicePrivateKeySig': sw_oidc_keys.results[0].content | b64decode,
+         'oidcServicePublicKeySig': sw_oidc_keys.results[1].content | b64decode,
+         'oidcServiceKeyIdSig': (sw_oidc_keys.results[1].content | hash('sha256'))[:16],
+       }) | dict2items }}
+  loop_control:
+    label: "{{ item.key }}"
+  register: sw_llng_over_files
+  no_log: true
+  diff: false
+
+- name: Read the Kerberos configuration
+  ansible.builtin.slurp:
+    src: /etc/krb5.conf
+  register: sw_krb5_conf
+
+- name: Fingerprint the portal keytab
+  ansible.builtin.stat:
+    path: "{{ sw_krb_llng_keytab }}"
+    checksum_algorithm: sha256
+  register: sw_llng_keytab_stat
+
+- name: Run LemonLDAP::NG
+  community.docker.docker_container:
+    name: lemonldap
+    image: "{{ sw_llng_image }}"
+    pull: missing
+    restart_policy: unless-stopped
+    # The label changes with the configuration, which recreates the
+    # container: a restart would keep stale single-file mounts.
+    labels:
+      star-wars.config: "{{ (sw_llng_over_files.results | map(attribute='checksum') | join + sw_krb5_conf.content + sw_llng_keytab_stat.stat.checksum) | hash('sha256') }}"
+    env:
+      SSODOMAIN: "{{ sw_domain }}"
+      PORTAL: "https://{{ sw_portal_host }}/"
+      LOGLEVEL: info
+    published_ports:
+      - "127.0.0.1:{{ sw_llng_port }}:80"
+    etc_hosts: "{{ {sw_fqdn: 'host-gateway'} }}"
+    volumes:
+      - llng-conf:/var/lib/lemonldap-ng/conf
+      - llng-sessions:/var/lib/lemonldap-ng/sessions
+      - llng-psessions:/var/lib/lemonldap-ng/psessions
+      - "{{ sw_llng_over }}:/over:ro"
+      - /etc/krb5.conf:/etc/krb5.conf:ro
+      - "{{ sw_krb_llng_keytab }}:/etc/krb5.keytab:ro"
+
+- name: Wait for the portal
+  ansible.builtin.uri:
+    url: "https://{{ sw_portal_host }}/.well-known/openid-configuration"
+  register: sw_llng_discovery
+  until: sw_llng_discovery.status == 200
+  retries: 30
+  delay: 2

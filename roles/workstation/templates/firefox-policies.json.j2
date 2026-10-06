@@ -1,0 +1,28 @@
+{{ {
+  'policies': {
+    'Authentication': {
+      'SPNEGO': ['.' ~ sw_domain],
+      'Locked': true
+    },
+    'Certificates': {
+      'Install': ['/usr/local/share/ca-certificates/star-wars-demo-ca.crt']
+    },
+    'Homepage': {
+      'URL': 'https://' ~ sw_portal_host ~ '/',
+      'StartPage': 'homepage'
+    },
+    'Bookmarks': [
+      {'Title': 'SSO portal', 'URL': 'https://' ~ sw_portal_host ~ '/', 'Placement': 'toolbar'},
+      {'Title': 'Directory', 'URL': 'https://' ~ sw_directory_host ~ '/', 'Placement': 'toolbar'},
+      {'Title': 'SSO manager', 'URL': 'https://' ~ sw_manager_host ~ '/', 'Placement': 'toolbar'}
+    ],
+    'DisplayBookmarksToolbar': 'always',
+    'NoDefaultBookmarks': true,
+    'OfferToSaveLogins': false,
+    'PasswordManagerEnabled': false,
+    'DisableTelemetry': true,
+    'DontCheckDefaultBrowser': true,
+    'OverrideFirstRunPage': '',
+    'OverridePostUpdatePage': ''
+  }
+} | to_nice_json(indent=2) }}

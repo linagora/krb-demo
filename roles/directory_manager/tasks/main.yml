@@ -1,0 +1,38 @@
+# The container reaches slapd and the portal through the host: the portal by
+# its public name, so that the issuer it sees is the one browsers see.
+- name: Read the demo CA
+  ansible.builtin.slurp:
+    src: "{{ sw_etc }}/pki/ca.crt"
+  register: sw_ca_cert
+
+- name: Run Twake Directory Manager
+  community.docker.docker_container:
+    name: twake-directory-manager
+    image: "{{ sw_tdm_image }}"
+    pull: missing
+    restart_policy: unless-stopped
+    env: "{{ sw_tdm_env }}"
+    published_ports:
+      - "127.0.0.1:{{ sw_tdm_port }}:8081"
+    etc_hosts: "{{ {sw_fqdn: 'host-gateway', sw_portal_host: 'host-gateway'} }}"
+    volumes:
+      - "{{ sw_etc }}/pki/ca.crt:/etc/ssl/star-wars-demo-ca.crt:ro"
+    # A new CA recreates the container, single-file mounts being stale.
+    labels:
+      star-wars.ca: "{{ sw_ca_cert.content | hash('sha256') }}"
+  no_log: true
+  diff: false
+
+# Everything but the OpenID Connect routes asks for a session: /login sending
+# the browser to the portal says the console runs and found its provider.
+- name: Wait for the console
+  ansible.builtin.uri:
+    url: "https://{{ sw_directory_host }}/login"
+    follow_redirects: none
+    status_code: [302, 303]
+  register: sw_tdm_login
+  until: >-
+    sw_tdm_login.status in [302, 303]
+    and sw_tdm_login.location is search('^https://' ~ sw_portal_host ~ '/')
+  retries: 30
+  delay: 2

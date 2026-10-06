@@ -1,0 +1,49 @@
+# Workstations need Unix identities, which the console does not manage: a
+# timer hands them out to the accounts it creates.
+
+- name: Create the Unix groups branch
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "ou=unix,{{ sw_ldap_base }}"
+    objectClass: organizationalUnit
+    attributes:
+      description: Unix groups of the workstations
+
+- name: Create the primary group
+  community.general.ldap_entry:
+    server_uri: ldapi:///
+    sasl_class: external
+    dn: "cn={{ sw_unix_group }},ou=unix,{{ sw_ldap_base }}"
+    objectClass: posixGroup
+    attributes:
+      gidNumber: "{{ sw_unix_gid }}"
+      description: Primary group of every account
+
+- name: Install the assignment script
+  ansible.builtin.template:
+    src: sw-posix-accounts.j2
+    dest: /usr/local/sbin/sw-posix-accounts
+    mode: "0755"
+
+- name: Install its service and timer
+  ansible.builtin.template:
+    src: "sw-posix-accounts.{{ item }}.j2"
+    dest: "/etc/systemd/system/sw-posix-accounts.{{ item }}"
+    mode: "0644"
+  loop: [service, timer]
+  notify: Reload systemd
+
+- name: Apply the systemd changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Give the existing accounts their Unix identity
+  ansible.builtin.command: /usr/local/sbin/sw-posix-accounts
+  register: sw_posix_run
+  changed_when: sw_posix_run.stdout | length > 0
+
+- name: Start the timer
+  ansible.builtin.systemd_service:
+    name: sw-posix-accounts.timer
+    state: started
+    enabled: true

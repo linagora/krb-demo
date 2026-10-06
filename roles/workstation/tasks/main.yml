@@ -1,0 +1,177 @@
+- name: Debian 13 only
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version == '13'
+    fail_msg: This playbook targets Debian 13 (trixie).
+
+- name: Set the host name
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
+# The workstations, so that they reach each other by name (SSH with a ticket
+# asks for host/<name>), and one line per service: the first name of a line
+# is the canonical one, and Firefox asks for a Kerberos ticket for the
+# canonical name (HTTP/auth..., not HTTP/dc...).
+- name: Resolve the machine and the domain controller
+  ansible.builtin.blockinfile:
+    path: "{{ item }}"
+    marker: "# {mark} star wars demo"
+    block: |
+      {% for pc in groups['workstations'] %}
+      {{ hostvars[pc].sw_workstation_address | default(hostvars[pc].ansible_facts.default_ipv4.address | default(hostvars[pc].ansible_host)) }} {{ pc }}.{{ sw_domain }} {{ pc }}
+      {% endfor %}
+      {{ sw_dc_address }} {{ sw_fqdn }} {{ sw_hostname }}
+      {{ sw_dc_address }} {{ sw_portal_host }}
+      {{ sw_dc_address }} {{ sw_manager_host }}
+      {{ sw_dc_address }} {{ sw_directory_host }}
+  loop:
+    - /etc/hosts
+    # cloud-init rewrites /etc/hosts at boot on cloud images.
+    - /etc/cloud/templates/hosts.debian.tmpl
+  failed_when: false
+
+- name: List the installed packages
+  ansible.builtin.package_facts:
+
+- name: Preseed the Kerberos client
+  ansible.builtin.debconf:
+    name: krb5-config
+    question: krb5-config/default_realm
+    vtype: string
+    value: "{{ sw_realm }}"
+  when: "'krb5-config' not in ansible_facts.packages"
+
+- name: Install the domain client
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - krb5-user
+      - ldap-utils
+      - libnss-sss
+      - libpam-sss
+      - sssd
+      - sssd-krb5
+      - sssd-ldap
+      - sssd-tools
+    update_cache: true
+    cache_valid_time: 3600
+
+# Trust
+
+- name: Read the demo CA on the domain controller
+  ansible.builtin.slurp:
+    src: "{{ sw_etc }}/pki/ca.crt"
+  delegate_to: "{{ sw_dc }}"
+  register: sw_ca_cert
+
+- name: Trust the demo CA
+  ansible.builtin.copy:
+    content: "{{ sw_ca_cert.content | b64decode }}"
+    dest: /usr/local/share/ca-certificates/star-wars-demo-ca.crt
+    mode: "0644"
+  register: sw_ca_trust
+
+- name: Look for the demo CA in the trust store
+  ansible.builtin.stat:
+    path: /etc/ssl/certs/star-wars-demo-ca.pem
+  register: sw_ca_trusted
+
+- name: Update the trust store
+  ansible.builtin.command: update-ca-certificates
+  when: sw_ca_trust.changed or not sw_ca_trusted.stat.exists
+  changed_when: true
+
+# Kerberos: the realm, and the machine's own principal. Its key lets sssd
+# check that the tickets it gets come from the real KDC.
+
+- name: Write the Kerberos configuration
+  ansible.builtin.template:
+    src: "{{ role_path }}/../kerberos/templates/krb5.conf.j2"
+    dest: /etc/krb5.conf
+    mode: "0644"
+
+- name: List the principals
+  ansible.builtin.command: kadmin.local -q listprincs
+  delegate_to: "{{ sw_dc }}"
+  register: sw_krb_listprincs
+  changed_when: false
+
+- name: Create the machine's principal
+  ansible.builtin.command: kadmin.local -q "addprinc -randkey {{ sw_host_principal }}"
+  delegate_to: "{{ sw_dc }}"
+  when: sw_host_principal not in sw_krb_listprincs.stdout_lines
+  changed_when: true
+
+- name: Create the directory of the machines' keytabs
+  ansible.builtin.file:
+    path: "{{ sw_etc }}/krb/hosts"
+    state: directory
+    mode: "0700"
+  delegate_to: "{{ sw_dc }}"
+
+# ktadd draws a new key: kept on the domain controller, the keytab survives a
+# reinstallation of the machine.
+- name: Export the machine's keytab
+  ansible.builtin.command:
+    cmd: kadmin.local -q "ktadd -k {{ sw_etc }}/krb/hosts/{{ sw_workstation_fqdn }}.keytab {{ sw_host_principal }}"
+    creates: "{{ sw_etc }}/krb/hosts/{{ sw_workstation_fqdn }}.keytab"
+  delegate_to: "{{ sw_dc }}"
+
+- name: Fetch the machine's keytab
+  ansible.builtin.fetch:
+    src: "{{ sw_etc }}/krb/hosts/{{ sw_workstation_fqdn }}.keytab"
+    dest: "{{ sw_secrets_dir }}/keytabs/{{ sw_workstation_fqdn }}.keytab"
+    flat: true
+  delegate_to: "{{ sw_dc }}"
+
+- name: Install the machine's keytab
+  ansible.builtin.copy:
+    src: "{{ sw_secrets_dir }}/keytabs/{{ sw_workstation_fqdn }}.keytab"
+    dest: /etc/krb5.keytab
+    mode: "0600"
+  notify: Restart sssd
+
+# Identities from the directory, passwords from the KDC.
+
+- name: Configure sssd
+  ansible.builtin.template:
+    src: sssd.conf.j2
+    dest: /etc/sssd/sssd.conf
+    # What sssd sets back at start (it runs as the sssd user since 2.10).
+    mode: "0640"
+  diff: false
+  notify: Restart sssd
+
+- name: Read the PAM session stack
+  ansible.builtin.slurp:
+    src: /etc/pam.d/common-session
+  register: sw_pam_session
+
+- name: Create home directories at first login
+  ansible.builtin.command: pam-auth-update --enable mkhomedir
+  when: "'pam_mkhomedir' not in (sw_pam_session.content | b64decode)"
+  changed_when: true
+
+- name: Start sssd
+  ansible.builtin.service:
+    name: sssd
+    state: started
+    enabled: true
+
+# SSH: Kerberos tickets from another machine of the domain, or the password.
+# Named to come before cloud-init's drop-in, which turns passwords off: sshd
+# keeps the first value it reads.
+- name: Let domain users in over SSH
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-star-wars.conf
+    content: |
+      # Generated by Ansible.
+      GSSAPIAuthentication yes
+      PasswordAuthentication yes
+    mode: "0644"
+  notify: Reload sshd
+
+- name: Set up the desktop
+  ansible.builtin.import_tasks: desktop.yml
+  when: sw_workstation_desktop | bool

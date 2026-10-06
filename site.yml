@@ -1,0 +1,25 @@
+- name: Star Wars domain controller
+  hosts: domain_controller
+  roles:
+    - common
+    - openldap
+    - kerberos
+    - demo_data
+    - posix
+    - reverse_proxy
+    - lemonldap
+    - directory_manager
+
+- name: Workstations joined to the domain
+  hosts: workstations
+  pre_tasks:
+    # sw_dc_address defaults to an address of the domain controller's facts,
+    # which a run limited to workstations has not gathered.
+    - name: Gather the domain controller's network facts
+      ansible.builtin.setup:
+        gather_subset: [network]
+      delegate_to: "{{ groups['domain_controller'][0] }}"
+      delegate_facts: true
+      run_once: true
+  roles:
+    - workstation

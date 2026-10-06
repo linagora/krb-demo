@@ -1,0 +1,85 @@
+- name: List the installed packages
+  ansible.builtin.package_facts:
+
+# Preseeding matters at installation only; krb5-config rewrites the answers.
+- name: Preseed the Kerberos packages
+  ansible.builtin.debconf:
+    name: krb5-config
+    question: "{{ item.q }}"
+    vtype: string
+    value: "{{ item.v }}"
+  loop:
+    - { q: krb5-config/default_realm, v: "{{ sw_realm }}" }
+    - { q: krb5-config/kerberos_servers, v: "{{ sw_fqdn }}" }
+    - { q: krb5-config/admin_server, v: "{{ sw_fqdn }}" }
+  when: "'krb5-config' not in ansible_facts.packages"
+
+- name: Install the KDC and kadmind
+  ansible.builtin.apt:
+    name: [krb5-kdc, krb5-admin-server, krb5-user]
+
+- name: Write the Kerberos configuration
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { src: krb5.conf.j2, dest: /etc/krb5.conf }
+    - { src: kdc.conf.j2, dest: /etc/krb5kdc/kdc.conf }
+    - { src: kadm5.acl.j2, dest: /etc/krb5kdc/kadm5.acl }
+  notify: Restart Kerberos
+
+- name: Create the realm
+  ansible.builtin.command:
+    cmd: kdb5_util create -s -r {{ sw_realm }} -P {{ sw_krb_master_password }}
+    creates: /var/lib/krb5kdc/principal
+  no_log: true
+
+- name: Start the KDC and kadmind
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: [krb5-kdc, krb5-admin-server]
+
+- name: List the principals
+  ansible.builtin.command: kadmin.local -q listprincs
+  register: sw_krb_listprincs
+  changed_when: false
+
+- name: Create the portal's service principals
+  ansible.builtin.command: kadmin.local -q "addprinc -randkey {{ item }}"
+  loop:
+    - "{{ sw_krb_llng_principal }}"
+    - "{{ sw_krb_http_principal }}"
+  when: item not in sw_krb_listprincs.stdout_lines
+  changed_when: true
+
+- name: Create the keytab directory
+  ansible.builtin.file:
+    path: "{{ sw_krb_llng_keytab | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: List the portal keytab
+  ansible.builtin.command: "klist -k {{ sw_krb_llng_keytab }}"
+  register: sw_krb_llng_klist
+  changed_when: false
+  failed_when: false
+
+# ktadd draws a new key each time: a principal goes into the keytab once.
+- name: Export the portal's principals to its keytab
+  ansible.builtin.command: kadmin.local -q "ktadd -k {{ sw_krb_llng_keytab }} {{ item }}"
+  loop:
+    - "{{ sw_krb_llng_principal }}"
+    - "{{ sw_krb_http_principal }}"
+  when: (' ' ~ item) not in sw_krb_llng_klist.stdout
+  changed_when: true
+
+# The portal runs as www-data (33) inside its container, as on the host.
+- name: Let the portal read its keytab
+  ansible.builtin.file:
+    path: "{{ sw_krb_llng_keytab }}"
+    owner: root
+    group: "33"
+    mode: "0640"

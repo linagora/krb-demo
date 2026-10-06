@@ -1,0 +1,5 @@
+- name: Restart Kerberos
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+  loop: [krb5-kdc, krb5-admin-server]

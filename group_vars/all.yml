@@ -1,0 +1,76 @@
+# DNS domain, Kerberos realm and LDAP suffix of the demo.
+sw_domain: star.wars
+sw_realm: "{{ sw_domain | upper }}"
+sw_ldap_base: "dc={{ sw_domain.split('.') | join(',dc=') }}"
+sw_organization: Star Wars
+
+# Names served by the domain controller. Clients resolve them to its address,
+# sw_dc_address (see docs/deployment.md).
+sw_hostname: dc
+sw_fqdn: "{{ sw_hostname }}.{{ sw_domain }}"
+sw_portal_host: "auth.{{ sw_domain }}"
+sw_manager_host: "manager.{{ sw_domain }}"
+sw_directory_host: "directory.{{ sw_domain }}"
+sw_dc_address: "{{ hostvars[groups['domain_controller'][0]].ansible_facts.default_ipv4.address }}"
+
+# Images.
+# The image the playbook was tested with (LemonLDAP::NG 2.23.2, trixie).
+sw_llng_image: yadd/lemonldap-ng-full@sha256:5e5de912a2d7d18c848a7dc79d4f1a3f31c18d4fedecd51f50c7afce1811c9a9
+sw_tdm_image: ghcr.io/linagora/twake-directory-manager:0.4.1
+
+# Every user of the demo gets this password; left empty, each one's password
+# is its login (hsolo / hsolo), as on LemonLDAP::NG's own demo.
+sw_demo_password: ""
+
+# Secrets are generated on the first run and kept on the controller, next to
+# the playbook, so that a second run finds the same ones. The domain controller
+# and the workstations share them.
+sw_secrets_dir: "{{ playbook_dir }}/secrets/{{ sw_domain }}"
+sw_ldap_admin_password: "{{ lookup('ansible.builtin.password', sw_secrets_dir ~ '/ldap-admin', chars=['ascii_letters', 'digits'], length=32) }}"
+sw_ldap_tdm_password: "{{ lookup('ansible.builtin.password', sw_secrets_dir ~ '/ldap-directory-manager', chars=['ascii_letters', 'digits'], length=32) }}"
+sw_ldap_llng_password: "{{ lookup('ansible.builtin.password', sw_secrets_dir ~ '/ldap-lemonldap', chars=['ascii_letters', 'digits'], length=32) }}"
+sw_krb_master_password: "{{ lookup('ansible.builtin.password', sw_secrets_dir ~ '/krb-master', chars=['ascii_letters', 'digits'], length=32) }}"
+sw_ldap_workstation_password: "{{ lookup('ansible.builtin.password', sw_secrets_dir ~ '/ldap-workstation', chars=['ascii_letters', 'digits'], length=32) }}"
+sw_oidc_client_secret: "{{ lookup('ansible.builtin.password', sw_secrets_dir ~ '/oidc-directory-manager', chars=['ascii_letters', 'digits'], length=48) }}"
+
+# Where the machine keeps its own files.
+sw_etc: /etc/star-wars
+
+# Service accounts of the directory.
+sw_ldap_tdm_dn: "cn=directory-manager,ou=applicative,{{ sw_ldap_base }}"
+sw_ldap_llng_dn: "cn=lemonldap,ou=applicative,{{ sw_ldap_base }}"
+# Workstations (sssd) read users and Unix groups with this one.
+sw_ldap_workstation_dn: "cn=workstation,ou=applicative,{{ sw_ldap_base }}"
+sw_ldap_service_accounts:
+  - dn: "{{ sw_ldap_tdm_dn }}"
+    description: Twake Directory Manager
+    password: "{{ sw_ldap_tdm_password }}"
+  - dn: "{{ sw_ldap_llng_dn }}"
+    description: LemonLDAP::NG
+    password: "{{ sw_ldap_llng_password }}"
+  - dn: "{{ sw_ldap_workstation_dn }}"
+    description: Workstations (sssd)
+    password: "{{ sw_ldap_workstation_password }}"
+sw_ldap_modules: [ppolicy, memberof, refint, unique]
+
+# The portal's keytab holds two principals: the one LemonLDAP::NG's
+# krb-provisioning plugin authenticates to kadmind as, and the HTTP service
+# principal browsers get tickets for (Kerberos SSO). Both features read the
+# same krbKeytab key.
+sw_krb_llng_principal: "lemonldap/provisioning@{{ sw_realm }}"
+sw_krb_http_principal: "HTTP/{{ sw_portal_host }}@{{ sw_realm }}"
+sw_krb_llng_keytab: "{{ sw_etc }}/krb/lemonldap.keytab"
+
+# Unix identities: every account gets a uidNumber from sw_uid_min up, and the
+# primary group below. The posix role assigns them, the console knows nothing
+# of them.
+sw_uid_min: 10001
+sw_unix_group: starwars
+sw_unix_gid: 10000
+
+# OpenID Connect client of the console.
+sw_oidc_client_id: twake-directory-manager
+
+# Loopback ports the containers are published on, behind nginx.
+sw_llng_port: 8080
+sw_tdm_port: 8081

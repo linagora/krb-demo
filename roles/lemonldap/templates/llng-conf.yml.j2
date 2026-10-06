@@ -1,0 +1,112 @@
+# Configuration keys laid over the image's own configuration, one file per key
+# in /over: they win over what the manager saves. A template rather than a
+# variable, so that host names can be keys.
+https: 1
+securedCookie: 1
+# Accounts are created in the console, not on the portal.
+portalDisplayRegister: 0
+# The password tab, for sessions opened by Kerberos too (by default only
+# for those opened by a password).
+portalDisplayChangePassword: 1
+
+# Kerberos first: a browser holding a ticket (a workstation of the domain)
+# signs in without a password. Otherwise, or when that fails, the login form,
+# checked against the directory. krbByJs lets the portal try Kerberos from
+# the page, so that browsers with no ticket fall back to the form.
+authentication: Combination
+userDB: Same
+combination: "[K, L] or [L, L]"
+combModules:
+  K:
+    type: Kerberos
+    for: "1"
+  L:
+    type: LDAP
+    for: "0"
+krbByJs: 1
+krbRemoveDomain: 1
+krbAllowedDomains: "{{ sw_realm }}"
+
+# Users and passwords: the Twake directory. The filter lets in active
+# accounts only, so an account the console disables loses its SSO.
+passwordDB: LDAP
+ldapServer: "ldap://{{ sw_fqdn }}"
+ldapBase: "ou=users,{{ sw_ldap_base }}"
+managerDn: "{{ sw_ldap_llng_dn }}"
+managerPassword: {{ sw_ldap_llng_password | to_json }}
+AuthLDAPFilter: {{ sw_ldap_active_filter | to_json }}
+LDAPFilter: {{ sw_ldap_active_filter | to_json }}
+ldapPpolicyControl: 1
+ldapChangePasswordAsUser: 1
+ldapGroupBase: "ou=groups,{{ sw_ldap_base }}"
+ldapExportedVars:
+  uid: uid
+  cn: cn
+  sn: sn
+  givenName: givenName
+  mail: mail
+  title: title
+
+locationRules:
+  "{{ sw_portal_host }}":
+    "(?#checkUser)^/checkuser": inGroup("jedi-council")
+    "(?#errors)^/lmerror/": accept
+    default: accept
+  "{{ sw_manager_host }}":
+    default: inGroup("jedi-council")
+
+applicationList:
+  "1sw":
+    type: category
+    catname: "{{ sw_organization }}"
+    directory:
+      type: application
+      options:
+        name: Twake Directory Manager
+        description: Directory administration
+        uri: "https://{{ sw_directory_host }}/"
+        logo: database.png
+        display: "on"
+    manager:
+      type: application
+      options:
+        name: LemonLDAP::NG manager
+        description: SSO configuration
+        uri: "https://{{ sw_manager_host }}/"
+        logo: configure.png
+        display: auto
+
+# OpenID Connect provider, with the console as relying party.
+issuerDBOpenIDConnectActivation: 1
+oidcServiceMetaDataIssuer: "https://{{ sw_portal_host }}"
+oidcServiceKeyTypeSig: RSA
+oidcRPMetaDataOptions:
+  twake-dm:
+    oidcRPMetaDataOptionsDisplayName: Twake Directory Manager
+    oidcRPMetaDataOptionsClientID: "{{ sw_oidc_client_id }}"
+    oidcRPMetaDataOptionsClientSecret: {{ sw_oidc_client_secret | to_json }}
+    oidcRPMetaDataOptionsPublic: 0
+    oidcRPMetaDataOptionsRedirectUris: "https://{{ sw_directory_host }}/callback"
+    oidcRPMetaDataOptionsBypassConsent: 1
+    oidcRPMetaDataOptionsIDTokenSignAlg: RS256
+    oidcRPMetaDataOptionsRefreshToken: 1
+    oidcRPMetaDataOptionsLogoutType: back
+    oidcRPMetaDataOptionsLogoutUrl: "https://{{ sw_directory_host }}/backchannel-logout"
+    oidcRPMetaDataOptionsLogoutSessionRequired: 1
+oidcRPMetaDataExportedVars:
+  twake-dm:
+    email: mail
+    name: cn
+    family_name: sn
+    given_name: givenName
+    preferred_username: uid
+
+# krb-provisioning: each password login (re)sets the user's Kerberos key.
+krbProvisioningActivation: 1
+krbRealm: "{{ sw_realm }}"
+krbAdminServer: "{{ sw_fqdn }}"
+krbServicePrincipal: "{{ sw_krb_llng_principal }}"
+
+# Read by both the Kerberos module (HTTP/ principal) and krb-provisioning:
+# one keytab holds both principals. Perl's GSSAPI wants it at this path.
+krbKeytab: /etc/krb5.keytab

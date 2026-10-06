@@ -1,0 +1,10 @@
+# A minimal XFCE desktop with Firefox set up for the domain; false for a
+# command-line machine.
+sw_workstation_desktop: true
+# Keyboard layout of the desktop (XKB), e.g. fr, de, us.
+sw_keyboard_layout: us
+sw_keyboard_variant: ""
+
+sw_dc: "{{ groups['domain_controller'][0] }}"
+sw_workstation_fqdn: "{{ inventory_hostname }}.{{ sw_domain }}"
+sw_host_principal: "host/{{ sw_workstation_fqdn }}@{{ sw_realm }}"
