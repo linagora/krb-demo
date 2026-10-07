@@ -18,8 +18,8 @@ Internet through qemu's user network.
   an ARM computer will do;
 - about 7 GB of RAM and 10 GB of disk;
 - these ports free on `127.0.0.1`: TCP 2222 and 2223 (SSH to the VMs), UDP
-  10001 and 10002 (the private network), and TCP 5901 when Tatooine's screen is
-  on VNC;
+  10001 and 10002 (the private network), and TCP 5901 (5900 for
+  Coruscant's) when the screens are on VNC;
 - qemu 7.2 or later (Debian 12, Ubuntu 24.04), and the tools, on Debian or
   Ubuntu:
 
@@ -99,9 +99,23 @@ Remove those lines from `/etc/hosts` when you are done.
 
 ## Looking inside the VMs
 
-Coruscant has no screen: its console goes to `$LAB_DIR/coruscant/serial.log`. Log in with
-`lab/lab.sh ssh coruscant` (or `tatooine`), as `debian`, who has sudo without password;
-root has no password, as on any cloud image.
+Log in with `lab/lab.sh ssh coruscant` (or `tatooine`), as `debian`, who
+has sudo without password; root has no password, as on any cloud image.
+
+Coruscant has no screen: its console goes to `$LAB_DIR/coruscant/serial.log`.
+To see it in a window as well, start it with `LAB_SERVER_SCREEN=1`:
+
+```sh
+lab/lab.sh down      # if it runs; wait until lab/lab.sh status shows it stopped
+LAB_SERVER_SCREEN=1 lab/lab.sh up
+```
+
+and log in there as `debian`, password `debian` (then `sudo -i`). Without a
+graphical session, or with `LAB_DISPLAY=vnc`, that screen is on VNC at
+`127.0.0.1:5900`. A lab created before this password existed lacks it:
+`lab/lab.sh ssh coruscant 'echo debian:debian | sudo chpasswd'`.
+
+The logs worth reading:
 
 ```sh
 sudo journalctl -f                                    # everything
@@ -152,7 +166,7 @@ it found it, and exits with the number of failures.
 - **`qemu-img: command not found`**: install `qemu-utils`.
 - **`coruscant did not start`** (or `tatooine`), followed by qemu's error: most often
   a port already taken, by another program or a lab started from another
-  `LAB_DIR`. `ss -tulpn | grep -E ':(2222|2223|10001|10002|5901) '` tells
+  `LAB_DIR`. `ss -tulpn | grep -E ':(2222|2223|10001|10002|5900|5901) '` tells
   which.
 - **`LAB_DIR is too long`**: qemu's monitor sockets live in `$LAB_DIR`, and a
   Unix socket path stops at 107 bytes. Use a shorter directory.

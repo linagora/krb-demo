@@ -1,7 +1,7 @@
 #!/bin/bash
 # A lab on this machine, without root: two qemu VMs running Debian 13.
 #
-#   coruscant  the domain controller (no display)
+#   coruscant  the domain controller, with a screen if LAB_SERVER_SCREEN=1
 #   tatooine   a workstation with a desktop, shown in a window (or over VNC)
 #
 # They share a private network, 10.10.0.0/24 (coruscant is 10.10.0.1, tatooine
@@ -24,6 +24,8 @@ declare -A SSH_PORT=([coruscant]=2222 [tatooine]=2223)
 declare -A LAN_LOCAL=([coruscant]=10001 [tatooine]=10002)
 declare -A LAN_REMOTE=([coruscant]=10002 [tatooine]=10001)
 declare -A MAC_ID=([coruscant]=01 [tatooine]=21)
+# VNC display, when a screen is not in a window: 127.0.0.1:5900 + this.
+declare -A VNC=([coruscant]=0 [tatooine]=1)
 
 die() { echo "lab: $*" >&2; exit 1; }
 pidfile() { echo "$LAB_DIR/$1.pid"; }
@@ -63,7 +65,8 @@ image() {
 }
 
 # A disk on top of the cloud image, and the cloud-init seed that sets the
-# host name, the SSH key and the private address.
+# host name, the SSH key and the private address. debian's password, debian
+# as for the demo's users, is for logging in on the screens.
 prepare() {
   local vm=$1 dir="$LAB_DIR/$1"
   [ -f "$dir/disk.qcow2" ] && return
@@ -76,6 +79,8 @@ users:
   - name: debian
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
+    lock_passwd: false
+    plain_text_passwd: debian
     ssh_authorized_keys:
       - $(cat "$LAB_DIR/id_lab.pub")
 EOF
@@ -111,12 +116,16 @@ start() {
     else
       echo "lab: ports 80/443/88 not forwarded to this machine (see docs/lab.md)"
     fi
+  fi
+  # tatooine's desktop is the point; coruscant's console, for its logs, only
+  # on demand.
+  if [ "$vm" = coruscant ] && [ "${LAB_SERVER_SCREEN:-0}" != 1 ]; then
     display=(-display none)
   elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ "${LAB_DISPLAY:-gtk}" = gtk ]; then
     display=(-display gtk,zoom-to-fit=on -vga std -device qemu-xhci -device usb-tablet)
   else
-    display=(-display none -vnc 127.0.0.1:1 -vga std -device qemu-xhci -device usb-tablet)
-    echo "lab: tatooine's screen is on VNC, 127.0.0.1:5901"
+    display=(-display none -vnc "127.0.0.1:${VNC[$vm]}" -vga std -device qemu-xhci -device usb-tablet)
+    echo "lab: $vm's screen is on VNC, 127.0.0.1:$((5900 + VNC[$vm]))"
   fi
   setsid qemu-system-x86_64 -enable-kvm -cpu host -smp 2 -m "${RAM[$vm]}" \
     -name "$vm" -pidfile "$(pidfile "$vm")" \
