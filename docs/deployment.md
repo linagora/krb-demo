@@ -13,10 +13,10 @@ On the controller (the machine running Ansible):
 The machines are fresh **Debian 13** installs, reachable over SSH with a sudo
 account:
 
-| Machine | Size | Network |
-|---|---|---|
-| Domain controller | 2 CPUs, 4 GB RAM, 10 GB disk | Internet access (Debian packages and two container images) |
-| Workstation (optional) | 2 CPUs, 3 GB RAM, 10 GB disk | Reaches the domain controller on 88, 389 and 443 |
+| Machine                | Size                         | Network                                                    |
+| ---------------------- | ---------------------------- | ---------------------------------------------------------- |
+| Domain controller      | 2 CPUs, 4 GB RAM, 10 GB disk | Internet access (Debian packages and two container images) |
+| Workstation (optional) | 2 CPUs, 3 GB RAM, 10 GB disk | Reaches the domain controller on 88, 389 and 443           |
 
 Every machine must be able to reach the domain controller at one address,
 `sw_dc_address`. It defaults to the domain controller's default IPv4 address
@@ -32,15 +32,15 @@ cp inventory.example.yml inventory.yml
 ```yaml
 all:
   children:
-    domain_controller:          # exactly one
+    domain_controller: # exactly one
       hosts:
-        dc:
+        coruscant:
           ansible_host: 192.0.2.10
           ansible_user: debian
           ansible_become: true
-    workstations:               # zero or more
+    workstations: # zero or more
       hosts:
-        pc1:
+        tatooine:
           ansible_host: 192.0.2.21
           ansible_user: debian
           ansible_become: true
@@ -48,8 +48,8 @@ all:
           sw_keyboard_layout: fr
 ```
 
-A workstation's inventory name becomes its host name: `pc1` is
-`pc1.star.wars` in the realm.
+A workstation's inventory name becomes its host name: `tatooine` is
+`tatooine.star.wars` in the realm.
 
 Then:
 
@@ -72,18 +72,18 @@ others reach it at another one.
 
 ### Domain controller
 
-| What | Where |
-|---|---|
-| OpenLDAP | Debian package, `ldap://dc.star.wars` (StartTLS), base `dc=star,dc=wars` |
-| MIT KDC and kadmind | Debian packages, realm `STAR.WARS`, ports 88 and 749 |
-| LemonLDAP::NG | container `lemonldap`, behind nginx: `https://auth.star.wars`, `https://manager.star.wars` |
-| Twake Directory Manager | container `twake-directory-manager`, behind nginx: `https://directory.star.wars` |
-| Unix identities | timer `sw-posix-accounts`, every 30 seconds |
-| Computers ↔ KDC | timer `sw-computers`, every 30 seconds |
-| Join service | `sw-join`, behind nginx: `https://dc.star.wars/join` |
-| Demo CA and certificate | `/etc/star-wars/pki/` |
-| LemonLDAP::NG configuration | `/etc/star-wars/llng/over/`, one file per key |
-| Keytabs | `/etc/star-wars/krb/` |
+| What                        | Where                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| OpenLDAP                    | Debian package, `ldap://coruscant.star.wars` (StartTLS), base `dc=star,dc=wars`            |
+| MIT KDC and kadmind         | Debian packages, realm `STAR.WARS`, ports 88 and 749                                       |
+| LemonLDAP::NG               | container `lemonldap`, behind nginx: `https://auth.star.wars`, `https://manager.star.wars` |
+| Twake Directory Manager     | container `twake-directory-manager`, behind nginx: `https://directory.star.wars`           |
+| Unix identities             | timer `sw-posix-accounts`, every 30 seconds                                                |
+| Computers ↔ KDC             | timer `sw-computers`, every 30 seconds                                                     |
+| Join service                | `sw-join`, behind nginx: `https://coruscant.star.wars/join`                                |
+| Demo CA and certificate     | `/etc/star-wars/pki/`                                                                      |
+| LemonLDAP::NG configuration | `/etc/star-wars/llng/over/`, one file per key                                              |
+| Keytabs                     | `/etc/star-wars/krb/`                                                                      |
 
 ### Workstations
 
@@ -96,16 +96,16 @@ the desktop: XFCE, LightDM, Firefox with its policies in
 The useful ones; the others are in `group_vars/all.yml` and the roles'
 `defaults/`.
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `sw_domain` | `star.wars` | DNS domain; the realm is its upper case, the LDAP base follows it |
-| `sw_dc_address` | the DC's default IPv4 | Address every machine reaches the domain controller at |
-| `sw_demo_password` | empty | One password for every demo user; empty, each password is the login |
-| `sw_workstation_desktop` | `true` | XFCE, LightDM and Firefox on workstations; `false` for command line only |
-| `sw_workstation_organization` | empty | Organization a workstation's computer belongs to in the console, as a path (`Galactic Empire / Imperial Navy`); empty for the top one |
-| `sw_keyboard_layout`, `sw_keyboard_variant` | `us`, empty | Keyboard of the workstations' desktop |
-| `sw_llng_extra_conf` | `{}` | LemonLDAP::NG keys added to, or replacing, the playbook's |
-| `sw_llng_image`, `sw_tdm_image` | pinned | Container images; the LemonLDAP::NG one is pinned by digest to the tested image |
+| Variable                                    | Default               | Meaning                                                                                                                               |
+| ------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `sw_domain`                                 | `star.wars`           | DNS domain; the realm is its upper case, the LDAP base follows it                                                                     |
+| `sw_dc_address`                             | the DC's default IPv4 | Address every machine reaches the domain controller at                                                                                |
+| `sw_demo_password`                          | empty                 | One password for every demo user; empty, each password is the login                                                                   |
+| `sw_workstation_desktop`                    | `true`                | XFCE, LightDM and Firefox on workstations; `false` for command line only                                                              |
+| `sw_workstation_organization`               | empty                 | Organization a workstation's computer belongs to in the console, as a path (`Galactic Empire / Imperial Navy`); empty for the top one |
+| `sw_keyboard_layout`, `sw_keyboard_variant` | `us`, empty           | Keyboard of the workstations' desktop                                                                                                 |
+| `sw_llng_extra_conf`                        | `{}`                  | LemonLDAP::NG keys added to, or replacing, the playbook's                                                                             |
+| `sw_llng_image`, `sw_tdm_image`             | pinned                | Container images; the LemonLDAP::NG one is pinned by digest to the tested image                                                       |
 
 The demo data (users, organizations, groups, positions) is in
 `roles/demo_data/defaults/main.yml`.
@@ -115,12 +115,12 @@ The demo data (users, organizations, groups, positions) is in
 Generated on the first run, kept on the controller in `secrets/star.wars/`
 (ignored by git):
 
-| File | Secret |
-|---|---|
-| `ldap-admin` | `cn=admin,dc=star,dc=wars` |
+| File                                                           | Secret                                                            |
+| -------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `ldap-admin`                                                   | `cn=admin,dc=star,dc=wars`                                        |
 | `ldap-directory-manager`, `ldap-lemonldap`, `ldap-workstation` | The service accounts of the console, the SSO and the workstations |
-| `krb-master` | The KDC's master key |
-| `oidc-directory-manager` | The console's OpenID Connect client secret |
+| `krb-master`                                                   | The KDC's master key                                              |
+| `oidc-directory-manager`                                       | The console's OpenID Connect client secret                        |
 
 Keep this directory to run the playbook again from elsewhere. Without it, a
 run generates new secrets: the service accounts and the OpenID Connect
@@ -141,7 +141,7 @@ Connect redirections carry full URLs. `.wars` is not a real top-level
 domain: add the names to `/etc/hosts`, **one per line**:
 
 ```
-192.0.2.10 dc.star.wars
+192.0.2.10 coruscant.star.wars
 192.0.2.10 auth.star.wars
 192.0.2.10 manager.star.wars
 192.0.2.10 directory.star.wars
@@ -149,7 +149,7 @@ domain: add the names to `/etc/hosts`, **one per line**:
 
 One per line matters for Kerberos: the first name of a line is the
 canonical one, and a browser asks for a ticket for the canonical name. With
-all the names on one line, it asks for `HTTP/dc.star.wars` instead of
+all the names on one line, it asks for `HTTP/coruscant.star.wars` instead of
 `HTTP/auth.star.wars`, and Kerberos SSO fails.
 
 Type the `https://` prefix: browsers may take a bare `directory.star.wars`
@@ -167,8 +167,8 @@ For `kinit` from that computer, point a `krb5.conf` at the KDC:
     rdns = false
 [realms]
     STAR.WARS = {
-        kdc = dc.star.wars
-        admin_server = dc.star.wars
+        kdc = coruscant.star.wars
+        admin_server = coruscant.star.wars
     }
 ```
 

@@ -9,14 +9,14 @@ all:
   children:
     domain_controller:
       hosts:
-        dc:
+        coruscant:
           ansible_port: 2222
           # The services answer on the private network. Host variables, as
           # group ones would lose to group_vars/all.yml.
           sw_dc_address: 10.10.0.1
     workstations:
       hosts:
-        pc1:
+        tatooine:
           ansible_port: 2223
           sw_dc_address: 10.10.0.1
           sw_workstation_address: 10.10.0.21

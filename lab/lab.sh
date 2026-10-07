@@ -1,10 +1,10 @@
 #!/bin/bash
 # A lab on this machine, without root: two qemu VMs running Debian 13.
 #
-#   dc   the domain controller (no display)
-#   pc1  a workstation with a desktop, shown in a window (or over VNC)
+#   coruscant  the domain controller (no display)
+#   tatooine   a workstation with a desktop, shown in a window (or over VNC)
 #
-# They share a private network, 10.10.0.0/24 (dc is 10.10.0.1, pc1
+# They share a private network, 10.10.0.0/24 (coruscant is 10.10.0.1, tatooine
 # 10.10.0.21), and each reaches the Internet through qemu's user network.
 #
 # Usage: lab/lab.sh up | deploy | ssh <vm> | screenshot <vm> <file.png>
@@ -14,16 +14,16 @@ set -euo pipefail
 LAB_DIR=${LAB_DIR:-$HOME/.cache/krb-demo-lab}
 IMAGE_URL=https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
 HERE=$(cd "$(dirname "$0")" && pwd)
-VMS=(dc pc1)
+VMS=(coruscant tatooine)
 
 # name -> RAM (MB), lan address, SSH port on the host
-declare -A RAM=([dc]=4096 [pc1]=3072)
-declare -A LAN=([dc]=10.10.0.1 [pc1]=10.10.0.21)
-declare -A SSH_PORT=([dc]=2222 [pc1]=2223)
+declare -A RAM=([coruscant]=4096 [tatooine]=3072)
+declare -A LAN=([coruscant]=10.10.0.1 [tatooine]=10.10.0.21)
+declare -A SSH_PORT=([coruscant]=2222 [tatooine]=2223)
 # The private network is a UDP tunnel between the two VMs.
-declare -A LAN_LOCAL=([dc]=10001 [pc1]=10002)
-declare -A LAN_REMOTE=([dc]=10002 [pc1]=10001)
-declare -A MAC_ID=([dc]=01 [pc1]=21)
+declare -A LAN_LOCAL=([coruscant]=10001 [tatooine]=10002)
+declare -A LAN_REMOTE=([coruscant]=10002 [tatooine]=10001)
+declare -A MAC_ID=([coruscant]=01 [tatooine]=21)
 
 die() { echo "lab: $*" >&2; exit 1; }
 pidfile() { echo "$LAB_DIR/$1.pid"; }
@@ -50,8 +50,9 @@ check_vm() {
 }
 
 image() {
-  # qemu's monitor sockets live there: Unix socket paths stop at 107 bytes.
-  [ ${#LAB_DIR} -le 90 ] || die "LAB_DIR is too long for a Unix socket path: $LAB_DIR"
+  # qemu's monitor sockets live there, in $LAB_DIR/coruscant/monitor: Unix
+  # socket paths stop at 107 bytes.
+  [ ${#LAB_DIR} -le 89 ] || die "LAB_DIR is too long for a Unix socket path: $LAB_DIR"
   mkdir -p "$LAB_DIR"
   if [ ! -f "$LAB_DIR/debian-13.qcow2" ]; then
     echo "lab: downloading the Debian 13 cloud image"
@@ -99,10 +100,10 @@ start() {
   local vm=$1 dir="$LAB_DIR/$1" fwd display
   running "$vm" && { echo "lab: $vm already runs"; return; }
   fwd="hostfwd=tcp:127.0.0.1:${SSH_PORT[$vm]}-:22"
-  if [ "$vm" = dc ]; then
+  if [ "$vm" = coruscant ]; then
     # The services, for a browser on this machine. Ports under 1024 need
     # ip_unprivileged_port_start lowered; without them the lab still works
-    # from pc1.
+    # from tatooine.
     if [ "$(cat /proc/sys/net/ipv4/ip_unprivileged_port_start)" -le 80 ]; then
       fwd+=",hostfwd=tcp:127.0.0.1:80-:80,hostfwd=tcp:127.0.0.1:443-:443"
       fwd+=",hostfwd=tcp:127.0.0.1:88-:88,hostfwd=udp:127.0.0.1:88-:88"
@@ -115,7 +116,7 @@ start() {
     display=(-display gtk,zoom-to-fit=on -vga std -device qemu-xhci -device usb-tablet)
   else
     display=(-display none -vnc 127.0.0.1:1 -vga std -device qemu-xhci -device usb-tablet)
-    echo "lab: pc1's screen is on VNC, 127.0.0.1:5901"
+    echo "lab: tatooine's screen is on VNC, 127.0.0.1:5901"
   fi
   setsid qemu-system-x86_64 -enable-kvm -cpu host -smp 2 -m "${RAM[$vm]}" \
     -name "$vm" -pidfile "$(pidfile "$vm")" \

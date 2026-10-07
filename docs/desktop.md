@@ -1,6 +1,6 @@
 # Using a workstation of the domain
 
-A tour of a user's day on `pc1`, as Luke Skywalker.
+A tour of a user's day on `tatooine`, as Luke Skywalker.
 
 ## Logging in
 
@@ -83,9 +83,9 @@ browser, with the password the administrator gave.
 
 ## When something goes wrong
 
-| What you see | What to do |
-|---|---|
+| What you see                                                              | What to do                                                                                                                                                             |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | "Your password is incorrect" at the login screen, with the right password | A recent password change: sign in on the portal with the new password from any browser without a ticket, then log in again. A new account: sign in on the portal first |
-| The login is refused at once | The account is disabled: see an administrator |
-| Firefox shows the login form | `klist` in a terminal: no ticket, run `kinit`, then reload the page |
-| `kinit: Clock skew too great` | The machine's clock is wrong |
+| The login is refused at once                                              | The account is disabled: see an administrator                                                                                                                          |
+| Firefox shows the login form                                              | `klist` in a terminal: no ticket, run `kinit`, then reload the page                                                                                                    |
+| `kinit: Clock skew too great`                                             | The machine's clock is wrong                                                                                                                                           |

@@ -152,17 +152,17 @@ it carries no password, and neither does the change itself.
 
 On the domain controller:
 
-| Task | Command |
-|---|---|
-| Read an account | `sudo ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b dc=star,dc=wars uid=hsolo` |
-| Who administers what | `sudo ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b ou=organization,dc=star,dc=wars twakeLocalAdminLink` |
-| List the principals | `sudo kadmin.local -q listprincs` |
-| A principal's details | `sudo kadmin.local -q "getprinc hsolo"` |
-| Set a Kerberos password by hand | `sudo kadmin.local -q "cpw hsolo"` |
-| Unix ids handed out lately | `journalctl -u sw-posix-accounts` |
-| Hand them out now | `sudo /usr/local/sbin/sw-posix-accounts` |
-| The SSO's logs | `sudo docker logs lemonldap` |
-| The console's logs | `sudo docker logs twake-directory-manager` |
+| Task                            | Command                                                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Read an account                 | `sudo ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b dc=star,dc=wars uid=hsolo`                           |
+| Who administers what            | `sudo ldapsearch -LLL -Q -Y EXTERNAL -H ldapi:/// -b ou=organization,dc=star,dc=wars twakeLocalAdminLink` |
+| List the principals             | `sudo kadmin.local -q listprincs`                                                                         |
+| A principal's details           | `sudo kadmin.local -q "getprinc hsolo"`                                                                   |
+| Set a Kerberos password by hand | `sudo kadmin.local -q "cpw hsolo"`                                                                        |
+| Unix ids handed out lately      | `journalctl -u sw-posix-accounts`                                                                         |
+| Hand them out now               | `sudo /usr/local/sbin/sw-posix-accounts`                                                                  |
+| The SSO's logs                  | `sudo docker logs lemonldap`                                                                              |
+| The console's logs              | `sudo docker logs twake-directory-manager`                                                                |
 
 On a workstation, `sudo sss_cache -E` drops what sssd remembers, so that a
 change in the directory shows at once.

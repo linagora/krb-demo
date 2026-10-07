@@ -6,7 +6,7 @@ sw_organization: Star Wars
 
 # Names served by the domain controller. Clients resolve them to its address,
 # sw_dc_address (see docs/deployment.md).
-sw_hostname: dc
+sw_hostname: coruscant
 sw_fqdn: "{{ sw_hostname }}.{{ sw_domain }}"
 sw_portal_host: "auth.{{ sw_domain }}"
 sw_manager_host: "manager.{{ sw_domain }}"

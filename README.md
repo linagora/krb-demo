@@ -18,11 +18,11 @@ logins. Do not expose it.
 
 ```mermaid
 flowchart LR
-  subgraph pc["Workstation (pc1)"]
+  subgraph pc["Workstation (Tatooine)"]
     login["Login screen<br/>sssd"]
     ff["Firefox"]
   end
-  subgraph dc["Domain controller (dc.star.wars)"]
+  subgraph coruscant["Domain controller (coruscant.star.wars)"]
     nginx["nginx (TLS)"]
     llng["LemonLDAP::NG<br/>auth.star.wars"]
     tdm["Twake Directory Manager<br/>directory.star.wars"]
@@ -46,13 +46,13 @@ flowchart LR
   login -. "star-wars-join: one-time password → keytab" .-> comp
 ```
 
-| Component | Role |
-|---|---|
-| OpenLDAP | The directory, with the Twake schema: users, organizations, groups |
-| Twake Directory Manager | Administration console of the directory, delegated per organization |
-| LemonLDAP::NG | SSO portal and OpenID Connect provider; Kerberos SSO for domain workstations |
-| MIT Kerberos | The realm's KDC; LemonLDAP::NG keeps its keys in step with the directory passwords |
-| Workstations | Debian 13 with sssd (identities from LDAP, passwords from Kerberos), XFCE and Firefox; managed as computers in the console, and joined with a one-time password |
+| Component               | Role                                                                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenLDAP                | The directory, with the Twake schema: users, organizations, groups                                                                                              |
+| Twake Directory Manager | Administration console of the directory, delegated per organization                                                                                             |
+| LemonLDAP::NG           | SSO portal and OpenID Connect provider; Kerberos SSO for domain workstations                                                                                    |
+| MIT Kerberos            | The realm's KDC; LemonLDAP::NG keeps its keys in step with the directory passwords                                                                              |
+| Workstations            | Debian 13 with sssd (identities from LDAP, passwords from Kerberos), XFCE and Firefox; managed as computers in the console, and joined with a one-time password |
 
 ## Who administers what in the galaxy
 
@@ -69,19 +69,19 @@ organization                      yoda        (the whole directory)
 └── Outer Rim                     lcalrissian
 ```
 
-| Login | Character | Member of | Administers in the console |
-|---|---|---|---|
-| `yoda` | Yoda | Jedi Order | **everything** |
-| `okenobi` | Obi-Wan Kenobi | Jedi Order | Jedi Order |
-| `lskywalker` | Luke Skywalker | Rebel Alliance / Rogue Squadron | – |
-| `lorgana` | Leia Organa | Rebel Alliance | Rebel Alliance, Rogue Squadron |
-| `wantilles` | Wedge Antilles | Rebel Alliance / Rogue Squadron | Rogue Squadron |
-| `c3po`, `r2d2` | C-3PO, R2-D2 | Rebel Alliance | – |
-| `hsolo`, `chewbacca`, `bfett` | Han Solo, Chewbacca, Boba Fett | Outer Rim | – |
-| `lcalrissian` | Lando Calrissian | Outer Rim | Outer Rim |
-| `dvador` | Dark Vador | Galactic Empire | Galactic Empire, Imperial Navy |
-| `spalpatine` | Sheev Palpatine | Galactic Empire | – |
-| `wtarkin` | Wilhuff Tarkin | Galactic Empire / Imperial Navy | Imperial Navy |
+| Login                         | Character                      | Member of                       | Administers in the console     |
+| ----------------------------- | ------------------------------ | ------------------------------- | ------------------------------ |
+| `yoda`                        | Yoda                           | Jedi Order                      | **everything**                 |
+| `okenobi`                     | Obi-Wan Kenobi                 | Jedi Order                      | Jedi Order                     |
+| `lskywalker`                  | Luke Skywalker                 | Rebel Alliance / Rogue Squadron | –                              |
+| `lorgana`                     | Leia Organa                    | Rebel Alliance                  | Rebel Alliance, Rogue Squadron |
+| `wantilles`                   | Wedge Antilles                 | Rebel Alliance / Rogue Squadron | Rogue Squadron                 |
+| `c3po`, `r2d2`                | C-3PO, R2-D2                   | Rebel Alliance                  | –                              |
+| `hsolo`, `chewbacca`, `bfett` | Han Solo, Chewbacca, Boba Fett | Outer Rim                       | –                              |
+| `lcalrissian`                 | Lando Calrissian               | Outer Rim                       | Outer Rim                      |
+| `dvador`                      | Dark Vador                     | Galactic Empire                 | Galactic Empire, Imperial Navy |
+| `spalpatine`                  | Sheev Palpatine                | Galactic Empire                 | –                              |
+| `wtarkin`                     | Wilhuff Tarkin                 | Galactic Empire / Imperial Navy | Imperial Navy                  |
 
 The SSO configuration (LemonLDAP::NG manager) is open to the **Jedi
 Council** group: `yoda` and `okenobi`.
@@ -91,7 +91,7 @@ Every password is the login (`hsolo` / `hsolo`).
 ## Quick start
 
 To try everything on your own machine, the [lab](docs/lab.md) starts two
-VMs (`dc` and a desktop workstation `pc1`) without root, and deploys them:
+VMs (`coruscant` and a desktop workstation `tatooine`) without root, and deploys them:
 
 ```sh
 ansible-galaxy collection install -r requirements.yml
@@ -99,18 +99,18 @@ lab/lab.sh up
 lab/lab.sh deploy
 ```
 
-Then log in on pc1's screen as `lskywalker` / `lskywalker`, and open
+Then log in on Tatooine's screen as `lskywalker` / `lskywalker`, and open
 Firefox: the portal greets Luke without asking for anything.
 
 To deploy on machines of your own, see [deployment](docs/deployment.md).
 
 ## Documentation
 
-| Document | For |
-|---|---|
-| [Deployment](docs/deployment.md) | Installing the domain controller and workstations on your machines |
-| [Lab](docs/lab.md) | Running the whole demo in two local VMs |
-| [Administration](docs/administration.md) | Managing users, organizations and groups; what happens behind the console |
-| [Computers](docs/computers.md) | Workstations in the console: creating, joining with a one-time password, disabling |
-| [Joining a PC](docs/workstation.md) | What joining a workstation to the domain does, and how to do it |
-| [Using a workstation](docs/desktop.md) | A user's day on a Linux PC of the domain |
+| Document                                 | For                                                                                |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| [Deployment](docs/deployment.md)         | Installing the domain controller and workstations on your machines                 |
+| [Lab](docs/lab.md)                       | Running the whole demo in two local VMs                                            |
+| [Administration](docs/administration.md) | Managing users, organizations and groups; what happens behind the console          |
+| [Computers](docs/computers.md)           | Workstations in the console: creating, joining with a one-time password, disabling |
+| [Joining a PC](docs/workstation.md)      | What joining a workstation to the domain does, and how to do it                    |
+| [Using a workstation](docs/desktop.md)   | A user's day on a Linux PC of the domain                                           |

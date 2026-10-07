@@ -4,13 +4,13 @@ The workstations of the domain are entries of the directory, managed in Twake
 Directory Manager like the accounts: **Computers** in the sidebar. A computer
 in the console is what the KDC knows of the machine:
 
-| In the console | On the domain |
-|---|---|
-| A computer is created | Its principal `host/<name>.star.wars` exists, with a random key |
+| In the console        | On the domain                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| A computer is created | Its principal `host/<name>.star.wars` exists, with a random key                                             |
 | Its password is reset | The console shows a **one-time join password**, which `star-wars-join` on the machine trades for its keytab |
-| It is disabled | Its principal gets no new tickets: **new logins on the machine are refused** |
-| It is enabled again | Logins work again |
-| It is deleted | Its principal is deleted |
+| It is disabled        | Its principal gets no new tickets: **new logins on the machine are refused**                                |
+| It is enabled again   | Logins work again                                                                                           |
+| It is deleted         | Its principal is deleted                                                                                    |
 
 ## Who manages which computers
 
@@ -63,7 +63,7 @@ create. Its actions are in `journalctl -u sw-computers`.
 
 ### The join service
 
-`sw-join` answers `POST https://dc.star.wars/join`, with the form fields
+`sw-join` answers `POST https://coruscant.star.wars/join`, with the form fields
 `host` and `password`:
 
 1. it binds to the directory as the computer, `cn=<host>,ou=computers`,
@@ -110,7 +110,7 @@ in the administrator's own login and password.
   valid until they expire, ten hours at most: an open session, or an SSH
   login with such a ticket, goes on. While the machine cannot reach the
   domain controller, it decides from what it has cached.
-- The domain controller's names (`dc`, `auth`, `manager`, `directory`) cannot
+- The domain controller's names (`coruscant`, `auth`, `manager`, `directory`) cannot
   be computers. A computer named after a host principal the console did not
   create is left alone by the reconciler, and refused by the join service:
   managing a computer gives no hold on a machine joined by other means.

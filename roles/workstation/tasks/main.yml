@@ -12,7 +12,7 @@
 # The workstations, so that they reach each other by name (SSH with a ticket
 # asks for host/<name>), and one line per service: the first name of a line
 # is the canonical one, and Firefox asks for a Kerberos ticket for the
-# canonical name (HTTP/auth..., not HTTP/dc...).
+# canonical name (HTTP/auth..., not HTTP/coruscant...).
 - name: Resolve the machine and the domain controller
   ansible.builtin.blockinfile:
     path: "{{ item }}"

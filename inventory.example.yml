@@ -4,14 +4,14 @@ all:
     # Exactly one: directory, KDC, SSO and console.
     domain_controller:
       hosts:
-        dc:
+        coruscant:
           ansible_host: 192.0.2.10
           ansible_user: debian
           ansible_become: true
     # Optional: Linux PCs joined to the domain (see docs/workstation.md).
     workstations:
       hosts:
-        pc1:
+        tatooine:
           ansible_host: 192.0.2.21
           ansible_user: debian
           ansible_become: true
