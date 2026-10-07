@@ -97,6 +97,11 @@ The console learns the entity from `computers.json`, a schema added to the
 image's own (`DM_LDAP_FLAT_SCHEMA`). A computer bound with its password reads
 its own entry and nothing else.
 
+The join password is only ever set by a reset: the schema marks it
+read-only, so the console's forms leave it out. Offered next to the host
+name, it made the creation form look like a login form, and browsers filled
+in the administrator's own login and password.
+
 ## Limits
 
 - The keytab travels over HTTPS, protected by the demo CA, and the one-time
