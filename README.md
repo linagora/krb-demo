@@ -116,3 +116,17 @@ To deploy on machines of your own, see [deployment](docs/deployment.md).
 | [Using a workstation](docs/desktop.md)   | A user's day on a Linux PC of the domain                                           |
 | [Rudder](docs/rudder.md)                 | Deploying configuration to the workstations (in progress)                          |
 | [VirtualBox](docs/virtualbox.md)         | The private network of the VMs, by hand                                            |
+
+## License
+
+Copyright (C) 2026-present Linagora <https://linagora.com>
+
+Authors:
+
+- Pascal Vilarem <https://github.com/pvi-github>
+- Xavier Guimard <yadd@debian.org>
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See [LICENSE](LICENSE).
