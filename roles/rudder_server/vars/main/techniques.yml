@@ -1,0 +1,50 @@
+# What the role knows about a Rudder technique, to build a directive of it:
+#
+#   path  the sections around a technique's fields, from the outside in. The
+#         innermost one is repeated for each instance (a file, a package...).
+#   vars  every field of the technique with its default value. Rudder leaves
+#         out of the policy a component whose fields are missing ("not
+#         applicable"): all of them are sent, the directive's own values over
+#         these. Values are strings.
+#
+# The names come from the technique's metadata.xml, in
+# /var/rudder/configuration-repository/techniques/ on the server.
+sw_rudder_techniques:
+  # File download (Rudder server): copies a file of the shared folder.
+  copyGitFile:
+    path: ["Copy file and PostHook", "Copy file"]
+    vars:
+      COPYFILE_NAME: ""
+      COPYFILE_DESTINATION: ""
+      COPYFILE_OWNER: root
+      COPYFILE_GROUP: root
+      COPYFILE_PERM: "644"
+      COPYFILE_RECURSION: "0"
+      COPYFILE_PURGE: "false"
+      # mtime, ctime, atime, exists, binary or digest
+      COPYFILE_COMPARE_METHOD: digest
+      COPYFILE_SUID: "false"
+      COPYFILE_SGID: "false"
+      COPYFILE_STICKY_FOLDER: "false"
+      COPYFILE_EXCLUDE_INCLUDE_OPTION: none
+      COPYFILE_EXCLUDE_INCLUDE: ""
+      COPYFILE_POST_HOOK_RUN: "false"
+      COPYFILE_POST_HOOK_COMMAND: ""
+
+  # Packages.
+  packageManagement:
+    path: ["Package"]
+    vars:
+      PACKAGE_LIST: ""
+      # present, absent or upgrade_only
+      PACKAGE_STATE: present
+      # any, latest or specific
+      PACKAGE_VERSION: any
+      PACKAGE_VERSION_SPECIFIC: ""
+      PACKAGE_ARCHITECTURE: default
+      PACKAGE_ARCHITECTURE_SPECIFIC: ""
+      # default (the machine's own), apt, yum...
+      PACKAGE_MANAGER: default
+      PACKAGE_MANAGER_ALLOW_UNTRUSTED: "false"
+      PACKAGE_MANAGER_OPTIONS: ""
+      PACKAGE_POST_HOOK_COMMAND: ""

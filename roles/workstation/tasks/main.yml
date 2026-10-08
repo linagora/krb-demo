@@ -25,6 +25,9 @@
       {{ sw_dc_address }} {{ sw_portal_host }}
       {{ sw_dc_address }} {{ sw_manager_host }}
       {{ sw_dc_address }} {{ sw_directory_host }}
+      {% for srv in groups['rudder_server'] | default([]) %}
+      {{ hostvars[srv].sw_rudder_address | default(hostvars[srv].ansible_host) }} {{ srv }}.{{ sw_domain }} {{ srv }}
+      {% endfor %}
   loop:
     - /etc/hosts
     # cloud-init rewrites /etc/hosts at boot on cloud images.
@@ -46,6 +49,7 @@
   ansible.builtin.apt:
     name:
       - ca-certificates
+      - curl
       - krb5-user
       - ldap-utils
       - libnss-sss

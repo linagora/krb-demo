@@ -1,29 +1,33 @@
 #!/bin/bash
-# A lab on this machine, without root: two qemu VMs running Debian 13.
+# A lab on this machine, without root: three qemu VMs.
 #
 #   coruscant  the domain controller, with a screen if LAB_SERVER_SCREEN=1
+#   kamino     the Rudder server (no display)
 #   tatooine   a workstation with a desktop, shown in a window (or over VNC)
 #
-# They share a private network, 10.10.0.0/24 (coruscant is 10.10.0.1, tatooine
-# 10.10.0.21), and each reaches the Internet through qemu's user network.
+# They share a private network, 10.10.0.0/24 (coruscant is 10.10.0.1, kamino
+# 10.10.0.2, tatooine 10.10.0.21), and each reaches the Internet through
+# qemu's user network.
 #
 # Usage: lab/lab.sh up | deploy | ssh <vm> | screenshot <vm> <file.png>
 #                   | status | down | destroy
 set -euo pipefail
 
 LAB_DIR=${LAB_DIR:-$HOME/.cache/krb-demo-lab}
-IMAGE_URL=https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
+# Debian release of each VM, and where its cloud image comes from.
+declare -A RELEASE=([coruscant]=13 [tatooine]=13 [kamino]=13)
+declare -A CODENAME=([12]=bookworm [13]=trixie)
+image_url() { echo "https://cloud.debian.org/images/cloud/${CODENAME[$1]}/latest/debian-$1-genericcloud-amd64.qcow2"; }
 HERE=$(cd "$(dirname "$0")" && pwd)
-VMS=(coruscant tatooine)
+VMS=(coruscant kamino tatooine)
 
 # name -> RAM (MB), lan address, SSH port on the host
-declare -A RAM=([coruscant]=4096 [tatooine]=3072)
-declare -A LAN=([coruscant]=10.10.0.1 [tatooine]=10.10.0.21)
-declare -A SSH_PORT=([coruscant]=2222 [tatooine]=2223)
-# The private network is a UDP tunnel between the two VMs.
-declare -A LAN_LOCAL=([coruscant]=10001 [tatooine]=10002)
-declare -A LAN_REMOTE=([coruscant]=10002 [tatooine]=10001)
-declare -A MAC_ID=([coruscant]=01 [tatooine]=21)
+declare -A RAM=([coruscant]=4096 [kamino]=3072 [tatooine]=3072)
+declare -A LAN=([coruscant]=10.10.0.1 [kamino]=10.10.0.2 [tatooine]=10.10.0.21)
+declare -A SSH_PORT=([coruscant]=2222 [tatooine]=2223 [kamino]=2224)
+declare -A MAC_ID=([coruscant]=01 [kamino]=02 [tatooine]=21)
+# The private network is a multicast group on the loopback, shared by all VMs.
+LAN_GROUP=230.10.0.1:10001
 # VNC display, when a screen is not in a window: 127.0.0.1:5900 + this.
 declare -A VNC=([coruscant]=0 [tatooine]=1)
 
@@ -56,11 +60,14 @@ image() {
   # socket paths stop at 107 bytes.
   [ ${#LAB_DIR} -le 89 ] || die "LAB_DIR is too long for a Unix socket path: $LAB_DIR"
   mkdir -p "$LAB_DIR"
-  if [ ! -f "$LAB_DIR/debian-13.qcow2" ]; then
-    echo "lab: downloading the Debian 13 cloud image"
-    curl -fL --progress-bar -o "$LAB_DIR/debian-13.qcow2.part" "$IMAGE_URL"
-    mv "$LAB_DIR/debian-13.qcow2.part" "$LAB_DIR/debian-13.qcow2"
-  fi
+  local rel
+  for rel in $(printf '%s\n' "${RELEASE[@]}" | sort -u); do
+    if [ ! -f "$LAB_DIR/debian-$rel.qcow2" ]; then
+      echo "lab: downloading the Debian $rel cloud image"
+      curl -fL --progress-bar -o "$LAB_DIR/debian-$rel.qcow2.part" "$(image_url "$rel")"
+      mv "$LAB_DIR/debian-$rel.qcow2.part" "$LAB_DIR/debian-$rel.qcow2"
+    fi
+  done
   [ -f "$LAB_DIR/id_lab" ] || ssh-keygen -q -t ed25519 -N '' -C krb-demo-lab -f "$LAB_DIR/id_lab"
 }
 
@@ -71,7 +78,7 @@ prepare() {
   local vm=$1 dir="$LAB_DIR/$1"
   [ -f "$dir/disk.qcow2" ] && return
   mkdir -p "$dir"
-  qemu-img create -q -f qcow2 -b "$LAB_DIR/debian-13.qcow2" -F qcow2 "$dir/disk.qcow2" 20G
+  qemu-img create -q -f qcow2 -b "$LAB_DIR/debian-${RELEASE[$vm]}.qcow2" -F qcow2 "$dir/disk.qcow2" 20G
   cat >"$dir/user-data" <<EOF
 #cloud-config
 hostname: $vm
@@ -121,6 +128,8 @@ start() {
   # on demand.
   if [ "$vm" = coruscant ] && [ "${LAB_SERVER_SCREEN:-0}" != 1 ]; then
     display=(-display none)
+  elif [ "$vm" = kamino ]; then
+    display=(-display none)
   elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ "${LAB_DISPLAY:-gtk}" = gtk ]; then
     display=(-display gtk,zoom-to-fit=on -vga std -device qemu-xhci -device usb-tablet)
   else
@@ -133,7 +142,7 @@ start() {
     -drive "file=$dir/seed.iso,media=cdrom" \
     -netdev "user,id=wan,$fwd" \
     -device "virtio-net-pci,netdev=wan,mac=52:54:00:12:00:${MAC_ID[$vm]}" \
-    -netdev "dgram,id=lan,local.type=inet,local.host=127.0.0.1,local.port=${LAN_LOCAL[$vm]},remote.type=inet,remote.host=127.0.0.1,remote.port=${LAN_REMOTE[$vm]}" \
+    -netdev "socket,id=lan,mcast=$LAN_GROUP,localaddr=127.0.0.1" \
     -device "virtio-net-pci,netdev=lan,mac=52:54:00:10:00:${MAC_ID[$vm]}" \
     -monitor "unix:$dir/monitor,server,nowait" \
     -serial "file:$dir/serial.log" \

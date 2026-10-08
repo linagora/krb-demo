@@ -48,6 +48,7 @@
       - lightdm
       - lightdm-gtk-greeter
       - xfce4
+      - xfce4-screensaver
       - xfce4-terminal
       - xserver-xorg-core
       - xserver-xorg-input-libinput
@@ -73,18 +74,14 @@
       user-session=xfce
     mode: "0644"
 
-# Firefox: the demo CA, Kerberos SSO on the domain's sites, and bookmarks.
+# Firefox's policies (the demo CA, Kerberos SSO on the domain's sites,
+# bookmarks) are handed out by Rudder: see rudder/templates/. The directory is
+# the one it writes into.
 - name: Create the Firefox policy directory
   ansible.builtin.file:
     path: /etc/firefox/policies
     state: directory
     mode: "0755"
-
-- name: Write the Firefox policies
-  ansible.builtin.template:
-    src: firefox-policies.json.j2
-    dest: /etc/firefox/policies/policies.json
-    mode: "0644"
 
 - name: Enable the login screen
   ansible.builtin.systemd_service:
@@ -101,3 +98,7 @@
   ansible.builtin.systemd_service:
     name: lightdm
     state: "{{ 'restarted' if sw_xkb.changed else 'started' }}"
+
+# What shows the desktop's settings (wallpaper, screen saver) is restarted when
+# Rudder changes their files: the command and the units that do it are handed
+# out by Rudder too (directive star-wars-desktop-refresh).

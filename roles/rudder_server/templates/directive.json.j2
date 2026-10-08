@@ -1,0 +1,26 @@
+{#- The body of a directive, whatever its technique (vars/main/techniques.yml):
+    the technique's sections nested around each instance's fields. Every field
+    of the technique is sent, the directive's own values over the defaults: the
+    agent skips a component whose fields are missing ("not applicable"). -#}
+{%- set tech = sw_rudder_techniques[item.technique] -%}
+{%- set ns = namespace(sections=[]) -%}
+{%- for instance in item.instances -%}
+{%- set fields = [] -%}
+{%- for name, value in (tech.vars | combine(instance)).items() -%}
+{%- set _ = fields.append({'var': {'name': name, 'value': value | string}}) -%}
+{%- endfor -%}
+{%- set nest = namespace(section={'name': tech.path[-1], 'vars': fields}) -%}
+{%- for name in tech.path[:-1] | reverse -%}
+{%- set nest.section = {'name': name, 'sections': [{'section': nest.section}]} -%}
+{%- endfor -%}
+{%- set _ = ns.sections.append({'section': nest.section}) -%}
+{%- endfor -%}
+{{ {
+  'id': item.id,
+  'displayName': item.name,
+  'shortDescription': item.description,
+  'techniqueName': item.technique,
+  'techniqueVersion': item.version,
+  'enabled': true,
+  'parameters': {'section': {'name': 'sections', 'sections': ns.sections}}
+} | to_json }}

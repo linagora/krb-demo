@@ -20,3 +20,9 @@ all:
           ansible_port: 2223
           sw_dc_address: 10.10.0.1
           sw_workstation_address: 10.10.0.21
+    rudder_server:
+      hosts:
+        kamino:
+          ansible_port: 2224
+          sw_dc_address: 10.10.0.1
+          sw_rudder_address: 10.10.0.2

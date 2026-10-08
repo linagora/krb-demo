@@ -1,0 +1,11 @@
+# Managed by Rudder (star-wars-desktop-refresh).
+[Unit]
+Description=Watch the files Rudder hands out for the desktop
+
+[Path]
+PathChanged=/usr/share/backgrounds/star-wars-wallpaper.png
+PathChanged=/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+PathChanged=/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
+
+[Install]
+WantedBy=multi-user.target

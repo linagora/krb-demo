@@ -109,8 +109,10 @@ To deploy on machines of your own, see [deployment](docs/deployment.md).
 | Document                                 | For                                                                                |
 | ---------------------------------------- | ---------------------------------------------------------------------------------- |
 | [Deployment](docs/deployment.md)         | Installing the domain controller and workstations on your machines                 |
-| [Lab](docs/lab.md)                       | Running the whole demo in two local VMs                                            |
+| [Lab](docs/lab.md)                       | Running the whole demo in three local VMs                                          |
 | [Administration](docs/administration.md) | Managing users, organizations and groups; what happens behind the console          |
 | [Computers](docs/computers.md)           | Workstations in the console: creating, joining with a one-time password, disabling |
 | [Joining a PC](docs/workstation.md)      | What joining a workstation to the domain does, and how to do it                    |
 | [Using a workstation](docs/desktop.md)   | A user's day on a Linux PC of the domain                                           |
+| [Rudder](docs/rudder.md)                 | Deploying configuration to the workstations (in progress)                          |
+| [VirtualBox](docs/virtualbox.md)         | The private network of the VMs, by hand                                            |

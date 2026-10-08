@@ -1,0 +1,4 @@
+- name: Restart Rudder web application
+  ansible.builtin.service:
+    name: rudder-jetty
+    state: restarted

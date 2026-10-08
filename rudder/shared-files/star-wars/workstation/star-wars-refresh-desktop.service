@@ -1,0 +1,10 @@
+# Managed by Rudder (star-wars-desktop-refresh).
+[Unit]
+Description=Refresh the open desktop sessions
+
+[Service]
+Type=oneshot
+# The script starts xfdesktop in the users' sessions: systemd must not kill it
+# with the rest of the service's processes once the script ends.
+KillMode=process
+ExecStart=/usr/local/sbin/star-wars-refresh-desktop
