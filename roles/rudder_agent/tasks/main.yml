@@ -2,7 +2,7 @@
 # applies it. Debian 13 has agent packages; same series as the server.
 - name: Name the Rudder server
   ansible.builtin.set_fact:
-    sw_rudder_server_fqdn: "{{ groups['rudder_server'][0] }}.{{ sw_domain }}"
+    sw_rudder_server_fqdn: "{{ hostvars[groups['rudder_server'][0]].sw_rudder_fqdn }}"
 
 - name: Install the repository's prerequisites
   ansible.builtin.apt:

@@ -1,5 +1,5 @@
 # Rudder community edition, from Rudder's own APT repository.
-sw_rudder_fqdn: "{{ inventory_hostname }}.{{ sw_domain }}"
+
 # The address the workstations reach the server at.
 sw_rudder_address: "{{ ansible_facts.default_ipv4.address }}"
 # The web interface's administrator; the password is generated on the first
