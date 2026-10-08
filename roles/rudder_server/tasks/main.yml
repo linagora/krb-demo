@@ -82,7 +82,7 @@
 # interface can hand out the first time.
 - name: Read the API token
   ansible.builtin.set_fact:
-    sw_rudder_api_token: "{{ lookup('ansible.builtin.file', sw_rudder_api_token_file, errors='ignore') | trim }}"
+    sw_rudder_api_token: "{{ lookup('ansible.builtin.file', sw_rudder_api_token_file, errors='ignore') | default('', true) | trim }}"
   no_log: true
 
 - name: Say what is left to do by hand
