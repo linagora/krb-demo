@@ -8,7 +8,7 @@ all:
           ansible_host: 192.0.2.10
           ansible_user: debian
           ansible_become: true
-    # Optional: the Rudder server, which manages the workstations'
+    # Exactly one: the Rudder server, which manages the workstations'
     # configuration. A fresh Debian 13 (12 works too).
     rudder_server:
       hosts:
@@ -16,7 +16,9 @@ all:
           ansible_host: 192.0.2.11
           ansible_user: debian
           ansible_become: true
-    # Optional: Linux PCs joined to the domain (see docs/workstation.md).
+          # The workstations' network: the server refuses agents from others.
+          sw_rudder_allowed_networks: ["192.0.2.0/24"]
+    # Linux PCs joined to the domain (see docs/workstation.md).
     workstations:
       hosts:
         tatooine:

@@ -17,9 +17,9 @@ Firefox's policies, packages. To do: per group rules, menus, prohibitions.
 
 ## The server
 
-`rudder_server` group of the inventory, one machine, a fresh **Debian 13**
-(12 works too: both are supported by Rudder 9.1). In the lab it is the
-`kamino` VM, 3 GB of RAM.
+`rudder_server` group of the inventory, one machine, a fresh **Debian 13** (12
+works too: both are supported by Rudder 9.1). In the lab it is the `kamino`
+VM, 3 GB of RAM.
 
 ```sh
 ansible-playbook site.yml --limit kamino
@@ -29,7 +29,9 @@ The role adds Rudder's APT repository (`sw_rudder_version`, 9.1), installs
 `rudder-server` and sets the web interface's administrator from
 `sw_rudder_admin` and the password generated in
 `secrets/star.wars/rudder-admin`. The interface is on
-`https://rudder.star.wars/rudder/`, with Rudder's own certificate.
+`https://kamino.star.wars/rudder/` (the server's inventory name in the
+domain), with Rudder's own certificate. The workstations know that name
+through their `/etc/hosts`; in the lab, open it from Tatooine.
 
 The password is stored as a bcrypt hash (Rudder 9 refuses the older ones), which
 the controller computes: it needs `python3-passlib` and `python3-bcrypt`
@@ -37,49 +39,57 @@ the controller computes: it needs `python3-passlib` and `python3-bcrypt`
 
 ## The agent
 
-The `rudder_agent` role runs after `workstation`, when the inventory has a
-`rudder_server`: it adds the same APT repository, installs `rudder-agent`,
-points it at the server, sends its inventory and starts the agent's scheduler
-(`rudder-cf-execd`, which the package leaves stopped until a reboot).
+The `rudder_agent` role runs after `workstation`: it adds the same APT
+repository, installs `rudder-agent`, points it at the server, sends its
+inventory and starts the agent's scheduler (`rudder-cf-execd`, which the
+package leaves stopped until a reboot).
 
 It then has the node accepted through the API, waiting for the server to
-process its inventory, and fetches and applies its policies at once: the
-workstation is configured when the playbook ends, not five minutes later. A
-workstation reinstalled comes back under a new node id: the server refuses two
-nodes of the same name, so the role removes the former one first.
+process its inventory, and on that run fetches and applies its policies at
+once: the workstation is configured when the playbook ends, not five minutes
+later. A workstation reinstalled comes back under a new node id: the server
+refuses two nodes of the same name, so the role removes the former one first.
 Without an API token (the server deployed from another controller, without
 these secrets), the role says so: run the playbook on the Rudder server, which
 creates one, or accept the node in the web interface: Node management →
-**Pending nodes**.
+**Pending nodes**. When the server refuses the token (rebuilt since), the
+workstation's run stops: run the playbook on the Rudder server first, which
+creates a new one.
 
 ## API token
 
-What goes through the REST API (the allowed networks, the directives, the
-rules, accepting the nodes) needs a token. The REST API cannot create the first
-one: the role logs in to the web interface as the administrator and creates,
-through the interface's own API (`/rudder/secure/api/apiaccounts`), the API
-account `sw_rudder_api_account` (`ansible`), with the administrator's rights.
+What goes through the REST API (the allowed networks,
+`sw_rudder_allowed_networks`, which defaults to the lab's `10.10.0.0/24`; the
+directives, the rules, the policy generation; accepting and removing nodes)
+needs a token. The REST API cannot create the first one: the role logs in to
+the web interface as the administrator and creates, through the interface's
+own API (`/rudder/secure/api/apiaccounts`), the API account
+`sw_rudder_api_account` (`ansible`), with the administrator's rights.
 
 The account has every right, on every tenant, and never expires: fine for a
 demo, but its token is an administrator's. Its token is shown once only: the
-role keeps it in `secrets/star.wars/rudder-api-token`. When the file is missing, or when the
+role keeps it in `sw_rudder_api_token_file`,
+`secrets/star.wars/rudder-api-token`. When the file is missing, or when the
 server no longer knows the token (a server rebuilt), the role deletes the
 account and creates it again, with a new token.
 
-The tasks that use the API hide their output, token included; when one fails,
-run again with `-e sw_rudder_debug=true` to see the server's answer.
+The tasks that create the token, set the allowed networks and accept the
+nodes hide their output, token included; when one fails, run again with
+`-e sw_rudder_debug=true` to see the server's answer. Those that create the
+directives and rules do not, so that their items stay readable: with `-vvv`,
+they show the token in their arguments.
 
 ## What is deployed, and how
 
 `rudder/` holds the files, `roles/rudder_server/vars/` the catalogue:
 
-| Where                                        | What                                                                                                                                  |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `rudder/shared-files/`                       | Files handed out as they are (wallpapers, xfconf files)                                                                               |
-| `rudder/shared-files/star-wars/workstation/` | The workstation's own plumbing: the command that restarts the desktop's wallpaper and screen saver, and the systemd units that run it |
-| `rudder/templates/`                          | Files that mention the domain, rendered by the playbook (Firefox's policies)                                                          |
-| `vars/main/techniques.yml`                   | How a directive of each Rudder technique is made: its sections and the default of every field                                         |
-| `vars/main/policies.yml`                     | The directives (one technique, one list of files or packages each) and the rule that applies them                                     |
+| Where                                          | What                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rudder/shared-files/`                         | Files handed out as they are (wallpapers, xfconf files)                                                                                                                                                                                                                          |
+| `rudder/shared-files/star-wars/workstation/`   | The workstation's own plumbing: the command that restarts the desktop's wallpaper and screen saver, and the systemd units that run it                                                                                                                                            |
+| `rudder/templates/`                            | Files that mention the domain, rendered by the playbook (Firefox's policies)                                                                                                                                                                                                     |
+| `roles/rudder_server/vars/main/techniques.yml` | How a directive of each Rudder technique is made: its sections and the default of every field                                                                                                                                                                                    |
+| `roles/rudder_server/vars/main/policies.yml`   | The files to hand out (`sw_rudder_shared_files`, `sw_rudder_shared_templates`: a file not listed there is not copied), the directives (one technique, one list of files or packages each) and the rule `star-wars-workstations`, which applies them to every node but the server |
 
 `ansible-playbook site.yml --limit kamino` copies the files to the server's
 shared folder, creates or updates the directives and rules through the API,

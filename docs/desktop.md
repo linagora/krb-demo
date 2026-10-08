@@ -10,6 +10,14 @@ domain's KDC, and Luke's account comes from the directory.
 
 At the first login, the home directory `/home/lskywalker` is created.
 
+## The desktop
+
+The wallpaper (blue for the Rebels, red for the Empire, as the administrator
+chooses) and the screen saver are set by [Rudder](rudder.md) and locked: the
+settings dialogs cannot change them. After five minutes idle, the screen
+blanks and locks; Luke's password unlocks it. A change the administrator
+makes reaches the open session at the agent's next run, within five minutes.
+
 ## The Kerberos ticket
 
 The login hands out a ticket, valid for ten hours. In a terminal:
@@ -28,10 +36,10 @@ fetches a new one.
 
 ## The web, without passwords
 
-Open Firefox. Its home page is the SSO portal, `https://auth.star.wars`:
-it greets Luke at once, "Connected as lskywalker", with the applications he
-may use. Behind the scenes, Firefox handed the portal a ticket for
-`HTTP/auth.star.wars`.
+Open Firefox. Its settings, like the desktop's, come from Rudder. Its home
+page is the SSO portal, `https://auth.star.wars`: it greets Luke at once,
+"Connected as lskywalker", with the applications he may use. Behind the
+scenes, Firefox handed the portal a ticket for `HTTP/auth.star.wars`.
 
 The bookmarks bar leads to:
 
@@ -53,6 +61,8 @@ With the ticket, SSH needs no password either:
 ssh pc2.star.wars
 ```
 
+(any other workstation of the inventory: their names are in `/etc/hosts`).
+
 ## Changing one's password
 
 Passwords are changed on the SSO portal, in its **Password** tab, not on
@@ -69,7 +79,7 @@ Kerberos SSO carries no password. So after a change, on a workstation:
 3. get a ticket back: `kinit`, with the new password.
 
 Until step 2, the workstations still take the old password, for the login
-screen as for `kinit`.
+screen, the screen locker and `kinit`.
 
 The same goes after an administrator resets a password: see
 [administration](administration.md#resetting-a-password).
@@ -83,9 +93,9 @@ browser, with the password the administrator gave.
 
 ## When something goes wrong
 
-| What you see                                                              | What to do                                                                                                                                                             |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "Your password is incorrect" at the login screen, with the right password | A recent password change: sign in on the portal with the new password from any browser without a ticket, then log in again. A new account: sign in on the portal first |
-| The login is refused at once                                              | The account is disabled: see an administrator                                                                                                                          |
-| Firefox shows the login form                                              | `klist` in a terminal: no ticket, run `kinit`, then reload the page                                                                                                    |
-| `kinit: Clock skew too great`                                             | The machine's clock is wrong                                                                                                                                           |
+| What you see                                                              | What to do                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Your password is incorrect" at the login screen, with the right password | A recent password change: sign in on the portal with the new password from any browser without a ticket, then log in again. A new account: sign in on the portal first      |
+| The login is refused at once                                              | The account is disabled: see an administrator                                                                                                                               |
+| Firefox shows the login form                                              | `klist` in a terminal: no ticket, run `kinit`, then reload the page. With a ticket, `about:policies` empty: the machine has not got Rudder's policies, see an administrator |
+| `kinit: Clock skew too great`                                             | The machine's clock is wrong                                                                                                                                                |

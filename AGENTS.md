@@ -7,12 +7,13 @@ demo, corrupt the codebase or make the maintainers unhappy.
 
 - krb-demo is an Ansible playbook (`site.yml`) that builds a small
   Kerberos domain on Debian 13: a domain controller (OpenLDAP, MIT
-  KDC, LemonLDAP::NG, Twake Directory Manager) and optional Linux
-  workstations joined to it.
+  KDC, LemonLDAP::NG, Twake Directory Manager), a Rudder server that
+  configures the workstations, and Linux workstations joined to the
+  domain.
 
 - Each component is a role under `roles/`. Workstation configuration
   kept over time is managed by Rudder (`roles/rudder_server`,
-  `rudder/`).
+  `roles/rudder_agent`, `rudder/`; see `docs/rudder.md`).
 
 - Test in the lab: `lab/lab.sh up`, `lab/lab.sh deploy`, then
   `lab/check.sh` (see `docs/lab.md`).
@@ -40,7 +41,8 @@ demo, corrupt the codebase or make the maintainers unhappy.
 - Record significant decisions in a single place; do not duplicate
   them in comments or commits.
 - Elsewhere, reference that document rather than repeating its content.
-- Playbook variables are documented in `docs/deployment.md`.
+- Playbook variables are documented in `docs/deployment.md`; how
+  Rudder's catalogue is built, in `docs/rudder.md`.
 
 ## Git commit messages
 

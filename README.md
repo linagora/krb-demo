@@ -4,9 +4,12 @@ An Ansible playbook that builds a small Kerberos domain on Debian 13:
 
 - a **domain controller** with the directory, the KDC, the SSO and the
   administration console;
-- optionally, **Linux workstations** joined to the domain, with a desktop
-  where users log in with their directory account and reach the web
-  applications without typing their password again.
+- a **Rudder server**, the domain's equivalent of group policies: it hands
+  the workstations their configuration (Firefox's SSO, the desktop) and keeps
+  it;
+- **Linux workstations** joined to the domain, with a desktop where users log
+  in with their directory account and reach the web applications without
+  typing their password again.
 
 The galaxy is far, far away: the realm is `STAR.WARS`, and Han Solo, Leia
 Organa and Dark Vador are waiting for you in the directory.
@@ -31,6 +34,9 @@ flowchart LR
     posix["posix timer"]
     comp["computers timer<br/>join service"]
   end
+  subgraph kamino["Rudder server (kamino.star.wars)"]
+    rudder["Rudder"]
+  end
   login -- "users, groups (LDAP + StartTLS)" --> slapd
   login -- "password → ticket" --> kdc
   ff -- "HTTPS, Kerberos SSO" --> nginx
@@ -44,6 +50,7 @@ flowchart LR
   comp -- "computers" --> slapd
   comp -- "host/ principals" --> kdc
   login -. "star-wars-join: one-time password → keytab" .-> comp
+  rudder -- "policies: Firefox, desktop" --> pc
 ```
 
 | Component               | Role                                                                                                                                                            |
@@ -52,6 +59,7 @@ flowchart LR
 | Twake Directory Manager | Administration console of the directory, delegated per organization                                                                                             |
 | LemonLDAP::NG           | SSO portal and OpenID Connect provider; Kerberos SSO for domain workstations                                                                                    |
 | MIT Kerberos            | The realm's KDC; LemonLDAP::NG keeps its keys in step with the directory passwords                                                                              |
+| Rudder                  | Configuration of the workstations: Firefox's policies (Kerberos SSO, the demo CA), a locked wallpaper and screen saver                                          |
 | Workstations            | Debian 13 with sssd (identities from LDAP, passwords from Kerberos), XFCE and Firefox; managed as computers in the console, and joined with a one-time password |
 
 ## Who administers what in the galaxy
@@ -90,8 +98,9 @@ Every password is the login (`hsolo` / `hsolo`).
 
 ## Quick start
 
-To try everything on your own machine, the [lab](docs/lab.md) starts two
-VMs (`coruscant` and a desktop workstation `tatooine`) without root, and deploys them:
+To try everything on your own machine, the [lab](docs/lab.md) starts three
+VMs (`coruscant`, the Rudder server `kamino` and a desktop workstation
+`tatooine`) without root, and deploys them:
 
 ```sh
 ansible-galaxy collection install -r requirements.yml
@@ -108,7 +117,7 @@ To deploy on machines of your own, see [deployment](docs/deployment.md).
 
 | Document                                 | For                                                                                |
 | ---------------------------------------- | ---------------------------------------------------------------------------------- |
-| [Deployment](docs/deployment.md)         | Installing the domain controller and workstations on your machines                 |
+| [Deployment](docs/deployment.md)         | Installing the domain controller, the Rudder server and workstations               |
 | [Lab](docs/lab.md)                       | Running the whole demo in three local VMs                                          |
 | [Administration](docs/administration.md) | Managing users, organizations and groups; what happens behind the console          |
 | [Computers](docs/computers.md)           | Workstations in the console: creating, joining with a one-time password, disabling |
