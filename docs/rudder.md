@@ -60,10 +60,14 @@ one: the role logs in to the web interface as the administrator and creates,
 through the interface's own API (`/rudder/secure/api/apiaccounts`), the API
 account `sw_rudder_api_account` (`ansible`), with the administrator's rights.
 
-Its token is shown once only: the role keeps it in
-`secrets/star.wars/rudder-api-token`. When the file is missing, or when the
+The account has every right, on every tenant, and never expires: fine for a
+demo, but its token is an administrator's. Its token is shown once only: the
+role keeps it in `secrets/star.wars/rudder-api-token`. When the file is missing, or when the
 server no longer knows the token (a server rebuilt), the role deletes the
 account and creates it again, with a new token.
+
+The tasks that use the API hide their output, token included; when one fails,
+run again with `-e sw_rudder_debug=true` to see the server's answer.
 
 ## What is deployed, and how
 

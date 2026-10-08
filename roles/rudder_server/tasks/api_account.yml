@@ -16,7 +16,7 @@
   failed_when: >-
     sw_rudder_login.status != 302 or
     not (sw_rudder_login.location | default('')).endswith('/secure/index.html')
-  no_log: true
+  no_log: "{{ not (sw_rudder_debug | bool) }}"
 
 - name: Remove the former API account
   ansible.builtin.uri:
@@ -28,7 +28,7 @@
       X-Requested-With: XMLHttpRequest
     validate_certs: false
   changed_when: false
-  no_log: true
+  no_log: "{{ not (sw_rudder_debug | bool) }}"
 
 - name: Create the API account
   ansible.builtin.uri:
@@ -48,7 +48,7 @@
     validate_certs: false
   register: sw_rudder_account
   changed_when: true
-  no_log: true
+  no_log: "{{ not (sw_rudder_debug | bool) }}"
 
 - name: Keep the API token
   ansible.builtin.copy:

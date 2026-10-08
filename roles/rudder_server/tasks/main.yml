@@ -105,7 +105,7 @@
     validate_certs: false
     status_code: [200, 401]
   register: sw_rudder_token_check
-  no_log: true
+  no_log: "{{ not (sw_rudder_debug | bool) }}"
   when: sw_rudder_api_token | length > 0
 
 # Also when the server no longer knows the token: a server rebuilt.
@@ -125,7 +125,7 @@
     validate_certs: false
     status_code: 200
   changed_when: false
-  no_log: true
+  no_log: "{{ not (sw_rudder_debug | bool) }}"
 
 - name: Deploy the policies
   ansible.builtin.include_tasks: policies.yml

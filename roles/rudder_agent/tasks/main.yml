@@ -87,7 +87,7 @@
         status_code: [200, 401, 500]
       register: sw_rudder_known
       delegate_to: "{{ groups['rudder_server'][0] }}"
-      no_log: true
+      no_log: "{{ not (sw_rudder_debug | bool) }}"
 
     - name: Stop if the server refuses the token
       ansible.builtin.fail:
@@ -115,7 +115,7 @@
       retries: 30
       delay: 5
       delegate_to: "{{ groups['rudder_server'][0] }}"
-      no_log: true
+      no_log: "{{ not (sw_rudder_debug | bool) }}"
 
     # A workstation reinstalled comes back under a new id, and the server
     # refuses a second node of the same name: the former one goes.
@@ -127,7 +127,7 @@
         validate_certs: false
       register: sw_rudder_nodes
       delegate_to: "{{ groups['rudder_server'][0] }}"
-      no_log: true
+      no_log: "{{ not (sw_rudder_debug | bool) }}"
       when: sw_rudder_node.json.data.nodes[0].status == 'pending'
 
     - name: Remove the former node of the same name
@@ -145,7 +145,7 @@
            | rejectattr('id', 'equalto', sw_rudder_node_id) }}
       loop_control:
         label: "{{ item.id }}"
-      no_log: true
+      no_log: "{{ not (sw_rudder_debug | bool) }}"
       when: sw_rudder_node.json.data.nodes[0].status == 'pending'
 
     - name: Accept the node
@@ -161,7 +161,7 @@
       register: sw_rudder_accept
       changed_when: true
       delegate_to: "{{ groups['rudder_server'][0] }}"
-      no_log: true
+      no_log: "{{ not (sw_rudder_debug | bool) }}"
       when: sw_rudder_node.json.data.nodes[0].status == 'pending'
 
     # The server generates the node's policies after accepting it, in a few
