@@ -115,4 +115,4 @@ in the administrator's own login and password.
   create is left alone by the reconciler, and refused by the join service:
   managing a computer gives no hold on a machine joined by other means.
 - Deleting a computer does not touch the machine: its keytab simply stops
-  working.
+  working, and its Rudder node stays accepted until it is removed in Rudder.

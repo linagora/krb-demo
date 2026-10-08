@@ -4,46 +4,45 @@ For machines you installed yourself in VirtualBox (for the automatic version,
 see `lab/vboxlab.sh` in the [lab](lab.md#on-virtualbox)). Each VM gets two
 cards:
 
-| Card | Mode | For |
-|---|---|---|
-| 1 | NAT | Internet (packages), and SSH from the host through port forwarding |
-| 2 | Internal network `starwars` | The domain's private network, `10.10.0.0/24` |
+| Card | Mode                        | For                                                                |
+| ---- | --------------------------- | ------------------------------------------------------------------ |
+| 1    | NAT                         | Internet (packages), and SSH from the host through port forwarding |
+| 2    | Internal network `starwars` | The domain's private network, `10.10.0.0/24`                       |
 
-| VM | Private address | SSH from the host |
-|---|---|---|
-| `coruscant` | `10.10.0.1` | `127.0.0.1:2222` |
-| `tatooine` | `10.10.0.21` | `127.0.0.1:2223` |
-| `kamino` | `10.10.0.2` | `127.0.0.1:2224` |
+| VM          | Private address | SSH from the host |
+| ----------- | --------------- | ----------------- |
+| `coruscant` | `10.10.0.1`     | `127.0.0.1:2222`  |
+| `kamino`    | `10.10.0.2`     | `127.0.0.1:2224`  |
+| `tatooine`  | `10.10.0.21`    | `127.0.0.1:2223`  |
 
 An internal network has no DHCP and the host is not on it: addresses are
 static, and a browser on the host does not reach the services (see the end).
 
 ## 1. Cards, on the host
 
-List VMS :
+List the VMs:
 
 ```sh
 VBoxManage list vms
 ```
 
-
 With the VMs powered off (replace the names with yours):
 
 ```sh
-for vm in krb-demo-coruscant krb-demo-kamino krb-demo-tatooine; do
+for vm in coruscant kamino tatooine; do
   VBoxManage modifyvm "$vm" --nic2 intnet --intnet2 starwars --nictype2 virtio
 done
 
 # SSH from the host, on the NAT card (optional)
-VBoxManage modifyvm krb-demo-coruscant     --natpf1 "ssh,tcp,127.0.0.1,2222,,22"
-VBoxManage modifyvm krb-demo-tatooine    --natpf1 "ssh,tcp,127.0.0.1,2223,,22"
-VBoxManage modifyvm krb-demo-kamino --natpf1 "ssh,tcp,127.0.0.1,2224,,22"
+VBoxManage modifyvm coruscant --natpf1 "ssh,tcp,127.0.0.1,2222,,22"
+VBoxManage modifyvm tatooine  --natpf1 "ssh,tcp,127.0.0.1,2223,,22"
+VBoxManage modifyvm kamino    --natpf1 "ssh,tcp,127.0.0.1,2224,,22"
 ```
 
 Check:
 
 ```sh
-VBoxManage showvminfo krb-demo-coruscant --machinereadable | grep -E '^(nic|intnet|Forwarding)'
+VBoxManage showvminfo coruscant --machinereadable | grep -E '^(nic|intnet|Forwarding)'
 ```
 
 The same can be done in the graphical interface: Settings → Network →
@@ -114,12 +113,13 @@ useful from the host).
 On the controller:
 
 ```sh
-sudo apt install ansible
+sudo apt install ansible python3-passlib python3-bcrypt
 ansible-galaxy collection install -r requirements.yml
 ssh-copy-id debian@10.10.0.1; ssh-copy-id debian@10.10.0.2; ssh-copy-id debian@10.10.0.21
 ```
 
-(`debian` being a user with sudo on each VM.)
+(`debian` being a user with sudo on each VM.) Ansible must be 2.16 or later:
+Debian 12's is older, see [deployment](deployment.md#requirements).
 
 ## 5. Inventory
 
@@ -128,28 +128,31 @@ cp inventory.example.yml inventory.yml
 ```
 
 The addresses must be set by hand: the default ones come from the machine's
-*default route*, which is the NAT card (`10.0.2.15`, the same on every VM).
+_default route_, which is the NAT card (`10.0.2.15`, the same on every VM).
+They are host variables: group ones would lose to `group_vars/all.yml`.
 
 ```yaml
 all:
   vars:
     ansible_user: debian
     ansible_become: true
-    sw_dc_address: 10.10.0.1
   children:
     domain_controller:
       hosts:
         coruscant:
           ansible_host: 10.10.0.1
+          sw_dc_address: 10.10.0.1
     rudder_server:
       hosts:
         kamino:
           ansible_host: 10.10.0.2
+          sw_dc_address: 10.10.0.1
           sw_rudder_address: 10.10.0.2
     workstations:
       hosts:
         tatooine:
           ansible_host: 10.10.0.21
+          sw_dc_address: 10.10.0.1
           sw_workstation_address: 10.10.0.21
           sw_keyboard_layout: fr
 ```
@@ -160,10 +163,10 @@ ansible-playbook site.yml
 
 ## From a browser on the host (optional)
 
-The internal network is closed to the host. Either forward the ports of `coruscant`
-(80, 443, 88; the host needs `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80`
-for the first ones) and follow
-[the lab](lab.md#using-the-services-from-your-own-browser), or replace the
-internal network by a **host-only network** (`--nic2 hostonly
---hostonlyadapter2 vboxnet0`), where the host gets an address too, and use
-that network's addresses instead of `10.10.0.x`.
+The internal network is closed to the host. Either forward the ports of
+`coruscant` (TCP 80, 443, 88 and 749, UDP 88; the host needs `sudo sysctl -w
+net.ipv4.ip_unprivileged_port_start=80` for the first ones) and follow [the
+lab](lab.md#using-the-services-from-your-own-browser), or replace the internal
+network by a **host-only network** (`--nic2 hostonly --hostonlyadapter2
+vboxnet0`), where the host gets an address too, and use that network's
+addresses instead of `10.10.0.x`.

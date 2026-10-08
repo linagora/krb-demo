@@ -1,4 +1,4 @@
-# Lab: the whole demo in two local VMs
+# Lab: the whole demo in three local VMs
 
 `lab/lab.sh` runs the demo on your computer, without root and without
 libvirt: three qemu VMs from the Debian cloud images.
@@ -17,7 +17,8 @@ Internet through qemu's user network.
 - A Linux computer on x86_64 with KVM: `/dev/kvm` writable (be in the
   `kvm` group). The VMs are amd64 guests run with KVM: neither macOS nor
   an ARM computer will do;
-- about 10 GB of RAM and 15 GB of disk;
+- about 10 GB of RAM for the VMs (4 for Coruscant, 3 each for Kamino and
+  Tatooine), on top of your own use, and 15 GB of disk;
 - these ports free on `127.0.0.1`: TCP 2222, 2223 and 2224 (SSH to the VMs),
   UDP 10001 (the private network, a multicast group on the loopback), and TCP
   5901 (5900 for Coruscant's) when the screens are on VNC;
@@ -41,7 +42,7 @@ Internet through qemu's user network.
 
 ```sh
 ansible-galaxy collection install -r requirements.yml
-lab/lab.sh up        # downloads the cloud image the first time, starts coruscant and tatooine
+lab/lab.sh up        # downloads the cloud image the first time, starts the three VMs
 lab/lab.sh deploy    # runs the playbook against them
 ```
 
@@ -69,6 +70,19 @@ hypervisor), `lab/vboxlab.sh` builds the same three VMs, named `krb-coruscant`,
 inventory. Each VM has a NAT card and a card on the internal network
 `starwars`. It needs `VBoxManage`, `qemu-img` (`qemu-utils`), `genisoimage`
 and `curl`; its checks run with `LAB=lab/vboxlab.sh lab/check.sh`.
+
+What differs from `lab.sh`:
+
+- the VMs' files are in `$LAB_DIR/vbox/<vm>/`, the consoles in
+  `$LAB_DIR/vbox/<vm>/serial.log`;
+- Tatooine opens in a VirtualBox window, headless without a graphical
+  session; there is no VNC, no `LAB_SERVER_SCREEN`, and no `debian` password
+  for the screens;
+- the ports for your browser (below) are forwarded when the VMs are created:
+  lower `ip_unprivileged_port_start` before the first `up`, or `destroy` and
+  `up` again;
+- it uses the same ports and the same `$LAB_DIR` as `lab.sh`: run one lab at
+  a time.
 
 ## Using the services from your own browser
 
@@ -108,12 +122,17 @@ for `kinit` from your computer.
 
 Remove those lines from `/etc/hosts` when you are done.
 
+Rudder's web interface is not forwarded: open it from Tatooine, at
+`https://kamino.star.wars/rudder/` (Rudder's own certificate: accept the
+warning), as `admin`, with the password in `secrets/star.wars/rudder-admin`.
+
 ## Looking inside the VMs
 
-Log in with `lab/lab.sh ssh coruscant` (or `tatooine`), as `debian`, who
-has sudo without password; root has no password, as on any cloud image.
+Log in with `lab/lab.sh ssh coruscant` (or `kamino`, `tatooine`), as `debian`,
+who has sudo without password; root has no password, as on any cloud image.
 
-Coruscant has no screen: its console goes to `$LAB_DIR/coruscant/serial.log`.
+Coruscant and Kamino have no screen: their consoles go to
+`$LAB_DIR/<vm>/serial.log`.
 To see it in a window as well, start it with `LAB_SERVER_SCREEN=1`:
 
 ```sh
@@ -136,21 +155,26 @@ sudo docker logs -f lemonldap                         # the SSO
 sudo docker logs -f twake-directory-manager           # the console
 ```
 
+On Kamino, Rudder's web application: `sudo journalctl -u rudder-jetty`, and
+`/var/log/rudder/webapp/webapp.log` for the policy generations.
+
 On Tatooine, the logins go through `sssd` and `lightdm`:
-`sudo journalctl -u sssd -u lightdm`.
+`sudo journalctl -u sssd -u lightdm`. `sudo rudder agent info` tells whether
+the node is accepted and which policies it has, `sudo rudder agent run`
+applies them at once.
 
 ## Commands
 
-| Command                                        | Does                                       |
-| ---------------------------------------------- | ------------------------------------------ |
-| `lab/lab.sh up`                                | Creates the VMs if needed and starts them  |
-| `lab/lab.sh deploy [ansible args]`             | Runs the playbook with `lab/inventory.yml` |
-| `lab/lab.sh ssh coruscant\|tatooine [command]` | SSH as `debian` (sudo without password)    |
-| `lab/lab.sh screenshot tatooine shot.png`      | Saves Tatooine's screen                    |
-| `lab/check.sh`                                 | Runs the end-to-end checks (see below)     |
-| `lab/lab.sh status`                            | Tells which VMs run                        |
-| `lab/lab.sh down`                              | Shuts the VMs down; `up` starts them again |
-| `lab/lab.sh destroy`                           | Deletes the VMs; the cloud image stays     |
+| Command                                                | Does                                       |
+| ------------------------------------------------------ | ------------------------------------------ |
+| `lab/lab.sh up`                                        | Creates the VMs if needed and starts them  |
+| `lab/lab.sh deploy [ansible args]`                     | Runs the playbook with `lab/inventory.yml` |
+| `lab/lab.sh ssh coruscant\|kamino\|tatooine [command]` | SSH as `debian` (sudo without password)    |
+| `lab/lab.sh screenshot tatooine shot.png`              | Saves Tatooine's screen                    |
+| `lab/check.sh`                                         | Runs the end-to-end checks (see below)     |
+| `lab/lab.sh status`                                    | Tells which VMs run                        |
+| `lab/lab.sh down`                                      | Shuts the VMs down; `up` starts them again |
+| `lab/lab.sh destroy`                                   | Deletes the VMs; the cloud image stays     |
 
 Everything lives in `~/.cache/krb-demo-lab` (or `$LAB_DIR`): the cloud
 image, the lab's SSH key, the VM disks and logs.
@@ -169,7 +193,7 @@ administrator do, and prints one line per check:
   Firefox policies Rudder hands out;
 - a computer goes through its life: created, its principal appears, its
   one-time password gets its keytab once, then it is deleted with its
-  principal.
+  principal; a computer may not take the domain controller's name.
 
 It assumes the demo passwords (password = login), leaves the directory as
 it found it, and exits with the number of failures.
@@ -177,14 +201,14 @@ it found it, and exits with the number of failures.
 ## Troubleshooting
 
 - **`qemu-img: command not found`**: install `qemu-utils`.
-- **`coruscant did not start`** (or `tatooine`), followed by qemu's error: most often
-  a port already taken, by another program or a lab started from another
-  `LAB_DIR`. `ss -tulpn | grep -E ':(2222|2223|10001|10002|5900|5901) '` tells
-  which.
+- **`coruscant did not start`** (or `kamino`, `tatooine`), followed by qemu's
+  error: most often a port already taken, by another program or a lab started
+  from another `LAB_DIR`. `ss -tulpn | grep -E ':(2222|2223|2224|5900|5901) '`
+  tells which.
 - **`LAB_DIR is too long`**: qemu's monitor sockets live in `$LAB_DIR`, and a
   Unix socket path stops at 107 bytes. Use a shorter directory.
-- **`coruscant does not answer on SSH`**: look at `$LAB_DIR/coruscant/serial.log`, the VM's
-  console, and `$LAB_DIR/coruscant/qemu.log`.
+- **`coruscant does not answer on SSH`** (or another VM): look at
+  `$LAB_DIR/<vm>/serial.log`, the VM's console, and `$LAB_DIR/<vm>/qemu.log`.
 - **The console does not answer from your browser**: the ports are not
   forwarded; see [using the services from your own browser](#using-the-services-from-your-own-browser).
   The lab still works from Tatooine.
