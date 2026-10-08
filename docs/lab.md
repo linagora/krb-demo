@@ -165,6 +165,8 @@ administrator do, and prints one line per check:
   of their organizations, and a wrong password is refused;
 - Tatooine knows the accounts, its key is valid, `kinit` works, and hsolo logs
   in on Tatooine with a ticket;
+- Tatooine is accepted by Rudder, its agent runs on its own, and it has the
+  Firefox policies Rudder hands out;
 - a computer goes through its life: created, its principal appears, its
   one-time password gets its keytab once, then it is deleted with its
   principal.

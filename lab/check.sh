@@ -4,9 +4,10 @@
 # Usage: lab/check.sh
 #
 # Runs, through SSH to the VMs, what a user and an administrator would do:
-# SSO sign-ins, console rights, Kerberos on tatooine, a login on tatooine, and the life
-# of a computer (create, one-time password, join, delete). It assumes the demo
-# passwords (password = login) and leaves the directory as it found it.
+# SSO sign-ins, console rights, Kerberos on tatooine, a login on tatooine, Rudder's
+# policies on tatooine, and the life of a computer (create, one-time password,
+# join, delete). It assumes the demo passwords (password = login) and leaves the
+# directory as it found it.
 # Prints one line per check, and exits with the number of failures.
 set -uo pipefail
 
@@ -71,6 +72,11 @@ check "hsolo logs in on tatooine and gets a ticket" env SSH_ASKPASS="$askpass" S
   -o PreferredAuthentications=password -o NumberOfPasswordPrompts=1 \
   -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
   hsolo@127.0.0.1 'klist | grep -q "Default principal: hsolo@STAR.WARS"'
+
+echo "Rudder"
+check "tatooine is accepted by Rudder and has its policies" on tatooine 'sudo rudder agent info | grep -Eq "Configuration id: [0-9]{8}-"'
+check "tatooine's agent runs on its own" on tatooine 'systemctl is-active rudder-cf-execd'
+check "tatooine has Firefox's policies from Rudder" on tatooine 'grep -q auth.star.wars /etc/firefox/policies/policies.json'
 
 echo "Computers"
 API=https://directory.star.wars/api/v1/ldap/computers
