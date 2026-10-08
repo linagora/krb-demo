@@ -11,7 +11,7 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-LAB=$HERE/lab.sh
+LAB=${LAB:-$HERE/lab.sh}
 export LAB_DIR=${LAB_DIR:-$HOME/.cache/krb-demo-lab}
 BASE=dc=star,dc=wars
 FAILED=0

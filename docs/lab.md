@@ -1,14 +1,15 @@
 # Lab: the whole demo in two local VMs
 
 `lab/lab.sh` runs the demo on your computer, without root and without
-libvirt: two qemu VMs from the Debian 13 cloud image.
+libvirt: three qemu VMs from the Debian cloud images.
 
 | VM          | Role                       | Private address | SSH from your computer     |
 | ----------- | -------------------------- | --------------- | -------------------------- |
 | `coruscant` | Domain controller          | `10.10.0.1`     | `lab/lab.sh ssh coruscant` |
+| `kamino`    | Rudder server              | `10.10.0.2`     | `lab/lab.sh ssh kamino`    |
 | `tatooine`  | Workstation with a desktop | `10.10.0.21`    | `lab/lab.sh ssh tatooine`  |
 
-The two VMs share a private network, `10.10.0.0/24`, and each reaches the
+The three VMs share a private network, `10.10.0.0/24`, and each reaches the
 Internet through qemu's user network.
 
 ## Requirements
@@ -16,10 +17,10 @@ Internet through qemu's user network.
 - A Linux computer on x86_64 with KVM: `/dev/kvm` writable (be in the
   `kvm` group). The VMs are amd64 guests run with KVM: neither macOS nor
   an ARM computer will do;
-- about 7 GB of RAM and 10 GB of disk;
-- these ports free on `127.0.0.1`: TCP 2222 and 2223 (SSH to the VMs), UDP
-  10001 and 10002 (the private network), and TCP 5901 (5900 for
-  Coruscant's) when the screens are on VNC;
+- about 10 GB of RAM and 15 GB of disk;
+- these ports free on `127.0.0.1`: TCP 2222, 2223 and 2224 (SSH to the VMs),
+  UDP 10001 (the private network, a multicast group on the loopback), and TCP
+  5901 (5900 for Coruscant's) when the screens are on VNC;
 - qemu 7.2 or later (Debian 12, Ubuntu 24.04), and the tools, on Debian or
   Ubuntu:
 
@@ -58,6 +59,16 @@ password = login, and open Firefox. Without a graphical session (or with
 The services answer on the private network: Tatooine's Firefox reaches them,
 your computer's browser does not, even with the names in your
 `/etc/hosts`, until you follow the next section.
+
+## On VirtualBox
+
+Without KVM (a virtualized host, a machine where VirtualBox is the
+hypervisor), `lab/vboxlab.sh` builds the same three VMs, named `krb-coruscant`,
+`krb-kamino` and `krb-tatooine`, with the same commands (`up`, `deploy`, `ssh`,
+`screenshot`, `status`, `down`, `destroy`), the same SSH ports and the same
+inventory. Each VM has a NAT card and a card on the internal network
+`starwars`. It needs `VBoxManage`, `qemu-img` (`qemu-utils`), `genisoimage`
+and `curl`; its checks run with `LAB=lab/vboxlab.sh lab/check.sh`.
 
 ## Using the services from your own browser
 
