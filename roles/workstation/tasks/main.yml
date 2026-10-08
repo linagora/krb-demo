@@ -26,7 +26,7 @@
       {{ sw_dc_address }} {{ sw_manager_host }}
       {{ sw_dc_address }} {{ sw_directory_host }}
       {% for srv in groups['rudder_server'] | default([]) %}
-      {{ hostvars[srv].sw_rudder_address | default(hostvars[srv].ansible_host) }} {{ srv }}.{{ sw_domain }} {{ srv }}
+      {{ hostvars[srv].sw_rudder_address | default(hostvars[srv].ansible_host) }} {{ hostvars[srv].sw_rudder_fqdn }} {{ srv }}
       {% endfor %}
   loop:
     - /etc/hosts
