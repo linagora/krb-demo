@@ -1,5 +1,4 @@
-# The node then appears among the pending nodes of the Rudder server, to be
-# accepted there.
+# The node then appears among the pending nodes of the Rudder server.
 - name: Send the Rudder inventory
   ansible.builtin.command: rudder agent inventory
   changed_when: true

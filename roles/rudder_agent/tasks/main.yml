@@ -37,11 +37,145 @@
   when: >-
     sw_rudder_policy_server.content is not defined or
     (sw_rudder_policy_server.content | b64decode | trim) != sw_rudder_server_fqdn
+  register: sw_rudder_pointed
   changed_when: true
   notify: Send the Rudder inventory
 
-- name: Start the agent
+- name: Send the inventory
+  ansible.builtin.meta: flush_handlers
+
+# rudder-agent is an umbrella: the scheduler under it is skipped when the
+# package starts it, before the agent has any policy, and nothing starts it
+# again until a reboot.
+- name: Start the agent and its scheduler
   ansible.builtin.service:
-    name: rudder-agent
+    name: "{{ item }}"
     state: started
     enabled: true
+  loop: [rudder-agent, rudder-cf-execd]
+
+- name: Read the Rudder API token
+  ansible.builtin.set_fact:
+    sw_rudder_api_token: "{{ lookup('ansible.builtin.file', sw_rudder_api_token_file, errors='ignore') | default('', true) | trim }}"
+  no_log: true
+
+- name: Say what is left to do by hand
+  ansible.builtin.debug:
+    msg: >-
+      No Rudder API token in {{ sw_rudder_api_token_file }}: run the playbook
+      on the Rudder server, which creates it, or accept {{ inventory_hostname }}
+      in Rudder's web interface (Node management > Pending nodes).
+  when: sw_rudder_api_token | length == 0
+
+- name: Have the node accepted
+  when: sw_rudder_api_token | length > 0
+  vars:
+    sw_rudder_node_id: "{{ sw_rudder_uuid.content | b64decode | trim }}"
+  block:
+    - name: Read the node's id
+      ansible.builtin.slurp:
+        src: /opt/rudder/etc/uuid.hive
+      register: sw_rudder_uuid
+
+    - name: Look for the node on the server
+      ansible.builtin.uri:
+        url: "https://localhost/rudder/api/latest/nodes/{{ sw_rudder_node_id }}"
+        headers:
+          X-API-Token: "{{ sw_rudder_api_token }}"
+        validate_certs: false
+        # An unknown node answers 500.
+        status_code: [200, 401, 500]
+      register: sw_rudder_known
+      delegate_to: "{{ groups['rudder_server'][0] }}"
+      no_log: true
+
+    - name: Stop if the server refuses the token
+      ansible.builtin.fail:
+        msg: >-
+          The Rudder server refuses the token in {{ sw_rudder_api_token_file }}:
+          run the playbook on the Rudder server, which creates a new one.
+      when: sw_rudder_known.status == 401
+
+    # The inventory just sent may not be processed yet; an older one may have
+    # been lost.
+    - name: Send the inventory again
+      ansible.builtin.command: rudder agent inventory
+      changed_when: true
+      when: sw_rudder_known.status != 200 and sw_rudder_pointed is not changed
+
+    - name: Wait for the inventory to be processed
+      ansible.builtin.uri:
+        url: "https://localhost/rudder/api/latest/nodes/{{ sw_rudder_node_id }}"
+        headers:
+          X-API-Token: "{{ sw_rudder_api_token }}"
+        validate_certs: false
+        status_code: [200, 500]
+      register: sw_rudder_node
+      until: sw_rudder_node.status == 200
+      retries: 30
+      delay: 5
+      delegate_to: "{{ groups['rudder_server'][0] }}"
+      no_log: true
+
+    # A workstation reinstalled comes back under a new id, and the server
+    # refuses a second node of the same name: the former one goes.
+    - name: List the accepted nodes
+      ansible.builtin.uri:
+        url: https://localhost/rudder/api/latest/nodes?include=minimal
+        headers:
+          X-API-Token: "{{ sw_rudder_api_token }}"
+        validate_certs: false
+      register: sw_rudder_nodes
+      delegate_to: "{{ groups['rudder_server'][0] }}"
+      no_log: true
+      when: sw_rudder_node.json.data.nodes[0].status == 'pending'
+
+    - name: Remove the former node of the same name
+      ansible.builtin.uri:
+        url: "https://localhost/rudder/api/latest/nodes/{{ item.id }}"
+        method: DELETE
+        headers:
+          X-API-Token: "{{ sw_rudder_api_token }}"
+        validate_certs: false
+      changed_when: true
+      delegate_to: "{{ groups['rudder_server'][0] }}"
+      loop: >-
+        {{ sw_rudder_nodes.json.data.nodes
+           | selectattr('hostname', 'equalto', sw_rudder_node.json.data.nodes[0].hostname)
+           | rejectattr('id', 'equalto', sw_rudder_node_id) }}
+      loop_control:
+        label: "{{ item.id }}"
+      no_log: true
+      when: sw_rudder_node.json.data.nodes[0].status == 'pending'
+
+    - name: Accept the node
+      ansible.builtin.uri:
+        url: "https://localhost/rudder/api/latest/nodes/pending/{{ sw_rudder_node_id }}"
+        method: POST
+        headers:
+          X-API-Token: "{{ sw_rudder_api_token }}"
+        body_format: json
+        body:
+          status: accepted
+        validate_certs: false
+      register: sw_rudder_accept
+      changed_when: true
+      delegate_to: "{{ groups['rudder_server'][0] }}"
+      no_log: true
+      when: sw_rudder_node.json.data.nodes[0].status == 'pending'
+
+    # The server generates the node's policies after accepting it, in a few
+    # seconds: fetch and apply them now rather than at the next run.
+    - name: Fetch the node's policies
+      ansible.builtin.command: rudder agent update
+      register: sw_rudder_update
+      until: "'waiting to be accepted' not in sw_rudder_update.stdout"
+      retries: 24
+      delay: 5
+      changed_when: false
+      when: sw_rudder_accept is changed
+
+    - name: Apply the node's policies
+      ansible.builtin.command: rudder agent run
+      changed_when: true
+      when: sw_rudder_accept is changed
