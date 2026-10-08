@@ -89,3 +89,6 @@ sw_tdm_port: 8081
 # Rudder (community edition): series of its APT repository, for the server and
 # the agents alike. Check https://docs.rudder.io for the current one.
 sw_rudder_version: "9.1"
+# The token of the server's API account, which the server role creates and the
+# workstations use to have their node accepted.
+sw_rudder_api_token_file: "{{ sw_secrets_dir }}/rudder-api-token"

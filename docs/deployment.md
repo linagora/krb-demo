@@ -121,12 +121,14 @@ Generated on the first run, kept on the controller in `secrets/star.wars/`
 | `ldap-directory-manager`, `ldap-lemonldap`, `ldap-workstation` | The service accounts of the console, the SSO and the workstations |
 | `krb-master`                                                   | The KDC's master key                                              |
 | `oidc-directory-manager`                                       | The console's OpenID Connect client secret                        |
+| `rudder-admin`                                                 | The administrator of Rudder's web interface                       |
+| `rudder-api-token`                                             | The token of Rudder's API account, created by the playbook        |
 
 Keep this directory to run the playbook again from elsewhere. Without it, a
-run generates new secrets: the service accounts and the OpenID Connect
-client take them, but `ldap-admin` and `krb-master` are only used when the
-directory and the realm are created, so the new files would not match the
-machines. Nothing in the demo needs those two afterwards; `sudo` on the
+run generates new secrets: the service accounts, the OpenID Connect client
+and Rudder's administrator and API account take them, but `ldap-admin` and
+`krb-master` are only used when the directory and the realm are created, so
+the new files would not match the machines. Nothing in the demo needs those two afterwards; `sudo` on the
 domain controller reaches both the directory (`ldapi:///`) and the KDC
 (`kadmin.local`).
 

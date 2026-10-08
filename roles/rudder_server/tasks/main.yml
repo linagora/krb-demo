@@ -71,6 +71,11 @@
     (sw_rudder_admin_hash not in (sw_rudder_users.content | b64decode))
   notify: Restart Rudder web application
 
+# Logging in to the web interface, below, needs Rudder to have read the
+# administrator's password.
+- name: Apply the administrator's password
+  ansible.builtin.meta: flush_handlers
+
 - name: Start Rudder
   ansible.builtin.service:
     name: "{{ item }}"
@@ -78,31 +83,35 @@
     enabled: true
   loop: [rudder-jetty, rudder-agent]
 
-# What goes through the REST API: it needs a token, which only the web
-# interface can hand out the first time.
+- name: Wait for the web application
+  ansible.builtin.uri:
+    url: https://localhost/rudder/api/status
+    validate_certs: false
+  register: sw_rudder_api
+  until: sw_rudder_api.status == 200
+  retries: 60
+  delay: 5
+
 - name: Read the API token
   ansible.builtin.set_fact:
     sw_rudder_api_token: "{{ lookup('ansible.builtin.file', sw_rudder_api_token_file, errors='ignore') | default('', true) | trim }}"
   no_log: true
 
-- name: Say what is left to do by hand
-  ansible.builtin.debug:
-    msg: >-
-      No API token in {{ sw_rudder_api_token_file }}: create an API account in
-      Administration > API accounts, put its token in that file, and run again.
-      Allowed networks ({{ sw_rudder_allowed_networks | join(', ') }}) are left to you.
-  when: sw_rudder_api_token | length == 0
-
-- name: Wait for the API
+- name: Check the API token
   ansible.builtin.uri:
-    url: https://localhost/rudder/api/latest/status
+    url: https://localhost/rudder/api/latest/system/info
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
     validate_certs: false
-    status_code: [200, 401, 403]
-  register: sw_rudder_api
-  until: sw_rudder_api.status is defined
-  retries: 30
-  delay: 5
+    status_code: [200, 401]
+  register: sw_rudder_token_check
+  no_log: true
   when: sw_rudder_api_token | length > 0
+
+# Also when the server no longer knows the token: a server rebuilt.
+- name: Create the API account
+  ansible.builtin.include_tasks: api_account.yml
+  when: sw_rudder_api_token | length == 0 or sw_rudder_token_check.status != 200
 
 - name: Allow the domain's networks
   ansible.builtin.uri:
@@ -117,8 +126,6 @@
     status_code: 200
   changed_when: false
   no_log: true
-  when: sw_rudder_api_token | length > 0
 
 - name: Deploy the policies
   ansible.builtin.include_tasks: policies.yml
-  when: sw_rudder_api_token | length > 0

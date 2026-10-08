@@ -1,0 +1,67 @@
+# The web interface's own API, under /secure, takes the administrator's
+# session where the REST API wants a token. See docs/rudder.md, API token.
+
+- name: Log in to the web interface
+  ansible.builtin.uri:
+    url: https://localhost/rudder/j_spring_security_check
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ sw_rudder_admin }}"
+      password: "{{ sw_rudder_admin_password }}"
+    follow_redirects: none
+    validate_certs: false
+    status_code: 302
+  register: sw_rudder_login
+  failed_when: >-
+    sw_rudder_login.status != 302 or
+    not (sw_rudder_login.location | default('')).endswith('/secure/index.html')
+  no_log: true
+
+- name: Remove the former API account
+  ansible.builtin.uri:
+    url: "https://localhost/rudder/secure/api/apiaccounts/{{ sw_rudder_api_account }}"
+    method: DELETE
+    headers: &sw_rudder_session
+      # The session cookie: on a redirect not followed, uri leaves cookies empty.
+      Cookie: "{{ sw_rudder_login.set_cookie.split(';') | first }}"
+      X-Requested-With: XMLHttpRequest
+    validate_certs: false
+  changed_when: false
+  no_log: true
+
+- name: Create the API account
+  ansible.builtin.uri:
+    url: https://localhost/rudder/secure/api/apiaccounts
+    method: POST
+    headers: *sw_rudder_session
+    body_format: json
+    body:
+      id: "{{ sw_rudder_api_account }}"
+      name: "{{ sw_rudder_api_account }}"
+      description: Ansible, for the directives, rules and nodes of the demo
+      status: enabled
+      generateToken: true
+      authorizationType: rw
+      expirationPolicy: never
+      tenants: "*"
+    validate_certs: false
+  register: sw_rudder_account
+  changed_when: true
+  no_log: true
+
+- name: Keep the API token
+  ansible.builtin.copy:
+    content: "{{ sw_rudder_account.json.data.accounts[0].token }}\n"
+    dest: "{{ sw_rudder_api_token_file }}"
+    mode: "0600"
+  delegate_to: localhost
+  vars:
+    # The inventory's ansible_become would win over the become keyword.
+    ansible_become: false
+  no_log: true
+
+- name: Use the new API token
+  ansible.builtin.set_fact:
+    sw_rudder_api_token: "{{ sw_rudder_account.json.data.accounts[0].token }}"
+  no_log: true
