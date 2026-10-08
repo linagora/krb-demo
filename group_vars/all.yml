@@ -85,3 +85,7 @@ sw_oidc_client_id: twake-directory-manager
 # Loopback ports the containers are published on, behind nginx.
 sw_llng_port: 8080
 sw_tdm_port: 8081
+
+# Rudder (community edition): series of its APT repository, for the server and
+# the agents alike. Check https://docs.rudder.io for the current one.
+sw_rudder_version: "9.1"

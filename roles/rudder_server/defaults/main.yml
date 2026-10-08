@@ -1,0 +1,19 @@
+# Rudder community edition, from Rudder's own APT repository.
+sw_rudder_fqdn: "{{ inventory_hostname }}.{{ sw_domain }}"
+# The address the workstations reach the server at.
+sw_rudder_address: "{{ ansible_facts.default_ipv4.address }}"
+# The web interface's administrator; the password is generated on the first
+# run, with the other secrets.
+sw_rudder_admin: admin
+sw_rudder_admin_password: "{{ lookup('ansible.builtin.password', sw_secrets_dir ~ '/rudder-admin', chars=['ascii_letters', 'digits'], length=24) }}"
+# Networks whose machines may talk to the server (Settings > General > Allowed
+# networks); applied through the API once the token below exists.
+sw_rudder_allowed_networks: ["10.10.0.0/24"]
+# An API account's token, created once in the web interface (Administration >
+# API accounts) and kept with the other secrets. Without it, what needs the API
+# is left for the administrator.
+sw_rudder_api_token_file: "{{ sw_secrets_dir }}/rudder-api-token"
+# bcrypt hash of that password. The salt is drawn from the password: the same
+# password gives the same hash, which is how the role knows the file is up to
+# date. Its last character is one bcrypt keeps whole (.Oeu).
+sw_rudder_admin_hash: "{{ sw_rudder_admin_password | password_hash('bcrypt', salt=(sw_rudder_admin_password | hash('sha256'))[:21] ~ 'e', ident='2b', rounds=12) }}"

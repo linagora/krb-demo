@@ -1,0 +1,48 @@
+#!/bin/bash
+# Managed by Rudder (star-wars-desktop-refresh).
+#
+# star-wars-refresh-desktop: makes the open graphical sessions read the
+# desktop's configuration again (wallpaper...), after Rudder changed its files.
+# xfdesktop keeps its image in memory and xfconf its defaults: both restart,
+# for each user logged in on a screen.
+#
+# xfdesktop is started as a unit of its own (systemd-run), not as a child of
+# this script: systemd would kill it with the service that runs the script.
+set -u
+
+loginctl list-sessions --no-legend | while read -r id uid user _; do
+  [ "$(loginctl show-session "$id" -p Type --value)" = x11 ] || continue
+  display=$(loginctl show-session "$id" -p Display --value)
+  [ -n "$display" ] || continue
+  runtime=/run/user/$uid
+  home=$(getent passwd "$user" | cut -d: -f6)
+  env=(DISPLAY="$display" XAUTHORITY="$home/.Xauthority" XDG_RUNTIME_DIR="$runtime"
+       DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus")
+  unit=star-wars-xfdesktop-$uid
+
+  # xfconfd comes back on demand, over D-Bus.
+  pkill -u "$uid" -x xfconfd || true
+  runuser -u "$user" -- env "${env[@]}" xfdesktop --quit || true
+  sleep 1
+  systemctl stop "$unit.service" 2>/dev/null || true
+  systemd-run --quiet --collect --unit="$unit" --uid="$user" \
+    "${env[@]/#/--setenv=}" /usr/bin/xfdesktop
+  # The screen saver reads its settings at start too. One instance only: the old
+  # one must be gone before a new one starts (two lockers fight for the
+  # keyboard), and nothing is started if the session has none, which keeps a
+  # machine without xfce4-screensaver as it is.
+  if pgrep -u "$uid" -x xfce4-screensaver >/dev/null; then
+    runuser -u "$user" -- env "${env[@]}" xfce4-screensaver-command --exit || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      pgrep -u "$uid" -x xfce4-screensaver >/dev/null || break
+      sleep 1
+    done
+    pkill -u "$uid" -x xfce4-screensaver || true
+    systemctl stop "star-wars-xfss-$uid.service" 2>/dev/null || true
+    if ! pgrep -u "$uid" -x xfce4-screensaver >/dev/null; then
+      systemd-run --quiet --collect --unit="star-wars-xfss-$uid" --uid="$user" \
+        "${env[@]/#/--setenv=}" /usr/bin/xfce4-screensaver
+    fi
+  fi
+  echo "desktop of $user ($display) refreshed"
+done

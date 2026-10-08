@@ -1,0 +1,170 @@
+# Files, directives and rules, through the REST API (PUT on the collection
+# creates, POST on an id updates). Everything is created, or
+# updated when it exists: a second run changes nothing but what was edited.
+
+- name: Create the shared folder's directories
+  ansible.builtin.file:
+    path: "{{ sw_rudder_shared_files_dir }}/{{ item | dirname }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ sw_rudder_shared_files }}"
+
+- name: Create the directories of the rendered files
+  ansible.builtin.file:
+    path: "{{ sw_rudder_shared_files_dir }}/{{ item.dest | dirname }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ sw_rudder_shared_templates }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Render the files that mention the domain
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/rudder/templates/{{ item.src }}"
+    dest: "{{ sw_rudder_shared_files_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop: "{{ sw_rudder_shared_templates }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Hand the files out
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/rudder/shared-files/{{ item }}"
+    dest: "{{ sw_rudder_shared_files_dir }}/{{ item }}"
+    mode: "0644"
+  loop: "{{ sw_rudder_shared_files }}"
+
+- name: Look for the directives
+  ansible.builtin.uri:
+    url: "https://localhost/rudder/api/latest/directives/{{ item.id }}"
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    validate_certs: false
+    # An unknown id is a 500 "was not found", not a 404.
+    status_code: [200, 404, 500]
+  loop: "{{ sw_rudder_directives }}"
+  loop_control:
+    label: "{{ item.id }}"
+  register: sw_rudder_directives_found
+
+- name: Create the missing directives
+  ansible.builtin.uri:
+    url: https://localhost/rudder/api/latest/directives
+    method: PUT
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    body_format: json
+    body: "{{ lookup('ansible.builtin.template', 'directive.json.j2') | from_json }}"
+    validate_certs: false
+  loop: "{{ sw_rudder_directives }}"
+  loop_control:
+    label: "{{ item.id }}"
+    extended: true
+  when: sw_rudder_directives_found.results[ansible_loop.index0].json.result | default('') != 'success'
+
+- name: Update the existing directives
+  ansible.builtin.uri:
+    url: "https://localhost/rudder/api/latest/directives/{{ item.id }}"
+    method: POST
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    body_format: json
+    body: "{{ lookup('ansible.builtin.template', 'directive.json.j2') | from_json }}"
+    validate_certs: false
+  loop: "{{ sw_rudder_directives }}"
+  loop_control:
+    label: "{{ item.id }}"
+    extended: true
+  when: sw_rudder_directives_found.results[ansible_loop.index0].json.result | default('') == 'success'
+  changed_when: false
+
+- name: Look for the rules
+  ansible.builtin.uri:
+    url: "https://localhost/rudder/api/latest/rules/{{ item.id }}"
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    validate_certs: false
+    # An unknown id is a 500 "was not found", not a 404.
+    status_code: [200, 404, 500]
+  loop: "{{ sw_rudder_rules }}"
+  loop_control:
+    label: "{{ item.id }}"
+  register: sw_rudder_rules_found
+
+- name: Create the missing rules
+  ansible.builtin.uri:
+    url: https://localhost/rudder/api/latest/rules
+    method: PUT
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    body_format: json
+    body:
+      id: "{{ item.id }}"
+      displayName: "{{ item.name }}"
+      shortDescription: "{{ item.description }}"
+      enabled: true
+      directives: "{{ item.directives }}"
+      targets: "{{ item.targets }}"
+    validate_certs: false
+  loop: "{{ sw_rudder_rules }}"
+  loop_control:
+    label: "{{ item.id }}"
+    extended: true
+  when: sw_rudder_rules_found.results[ansible_loop.index0].json.result | default('') != 'success'
+
+- name: Update the existing rules
+  ansible.builtin.uri:
+    url: "https://localhost/rudder/api/latest/rules/{{ item.id }}"
+    method: POST
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    body_format: json
+    body:
+      displayName: "{{ item.name }}"
+      shortDescription: "{{ item.description }}"
+      enabled: true
+      directives: "{{ item.directives }}"
+      targets: "{{ item.targets }}"
+    validate_certs: false
+  loop: "{{ sw_rudder_rules }}"
+  loop_control:
+    label: "{{ item.id }}"
+    extended: true
+  when: sw_rudder_rules_found.results[ansible_loop.index0].json.result | default('') == 'success'
+  changed_when: false
+
+# The server regenerates the policies by itself after a change, but not
+# always when it is asked to by the API at once: ask, so that the nodes get the
+# new directives at their next run. A generation that fails (a wrong value in
+# a directive, say) leaves the nodes on their old policy without any sign:
+# read its outcome in the server's log.
+- name: Mark the server's log
+  ansible.builtin.command: wc -l /var/log/rudder/webapp/webapp.log
+  register: sw_rudder_log_mark
+  changed_when: false
+
+- name: Regenerate the policies
+  ansible.builtin.uri:
+    url: https://localhost/rudder/api/latest/system/regenerate/policies
+    method: POST
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    validate_certs: false
+  changed_when: false
+
+- name: Read how the generation went
+  ansible.builtin.shell: >-
+    tail -n +{{ (sw_rudder_log_mark.stdout.split()[0] | int) + 1 }} /var/log/rudder/webapp/webapp.log
+    | grep -E 'policy.generation.timing - Policy generation' | tail -n 1
+  register: sw_rudder_generation
+  until: sw_rudder_generation.stdout | length > 0
+  retries: 24
+  delay: 5
+  changed_when: false
+
+- name: Stop if the policies could not be generated
+  ansible.builtin.fail:
+    msg: >-
+      Rudder could not generate the policies: {{ sw_rudder_generation.stdout }}
+      See: grep ERROR /var/log/rudder/webapp/webapp.log
+  when: "'failed' in sw_rudder_generation.stdout"

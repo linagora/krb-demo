@@ -1,0 +1,111 @@
+# What Rudder deploys, as data: the files the server hands out, the directives
+# that use them, and the rule that applies them. The repository's rudder/
+# directory holds the files. vars/main/techniques.yml says how a directive of
+# each technique is made.
+
+# The wallpaper the workstations get: blue (the Rebels) or red (the Empire).
+# Switch with -e sw_rudder_wallpaper=red and run the role again: the files'
+# destination does not change, only which one is served.
+sw_rudder_wallpaper: blue
+
+# From rudder/shared-files/ on the controller to the server's shared folder.
+sw_rudder_shared_files_dir: /var/rudder/configuration-repository/shared-files
+sw_rudder_shared_files:
+  - star-wars/desktop/wallpaper-blue.png
+  - star-wars/desktop/wallpaper-red.png
+  - star-wars/desktop/xfce4-desktop.xml
+  - star-wars/desktop/xfce4-screensaver.xml
+  - star-wars/workstation/star-wars-refresh-desktop
+  - star-wars/workstation/star-wars-refresh-desktop.service
+  - star-wars/workstation/star-wars-refresh-desktop.path
+
+# Files that mention the domain: rendered from rudder/templates/ with the
+# playbook's variables, into the shared folder.
+sw_rudder_shared_templates:
+  - src: firefox-policies.json.j2
+    dest: star-wars/firefox/policies.json
+
+# One directive per entry: the technique and its version, and one instance per
+# file, package... with the fields that differ from the technique's defaults
+# (see vars/main/techniques.yml). Source paths are relative to the shared
+# folder.
+sw_rudder_directives:
+  - id: star-wars-desktop-files
+    name: Star Wars desktop
+    description: The wallpaper, locked for the users.
+    technique: copyGitFile
+    version: "2.3"
+    instances:
+      - COPYFILE_NAME: "star-wars/desktop/wallpaper-{{ sw_rudder_wallpaper }}.png"
+        COPYFILE_DESTINATION: /usr/share/backgrounds/star-wars-wallpaper.png
+      - COPYFILE_NAME: star-wars/desktop/xfce4-desktop.xml
+        COPYFILE_DESTINATION: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+
+  - id: star-wars-screensaver
+    name: Star Wars screen saver
+    description: The screen blanks after 5 minutes and asks for the password; locked.
+    technique: copyGitFile
+    version: "2.3"
+    instances:
+      - COPYFILE_NAME: star-wars/desktop/xfce4-screensaver.xml
+        COPYFILE_DESTINATION: /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
+
+  - id: star-wars-firefox
+    name: Star Wars Firefox
+    description: Firefox's policies - Kerberos SSO, the demo CA, home page, bookmarks.
+    technique: copyGitFile
+    version: "2.3"
+    instances:
+      - COPYFILE_NAME: star-wars/firefox/policies.json
+        COPYFILE_DESTINATION: /etc/firefox/policies/policies.json
+
+  # The desktop shows its settings (wallpaper, screen saver) as read at the
+  # start of the session. This command restarts what shows them, for each open
+  # session, and a systemd path unit runs it when Rudder changes their files.
+  # The units are loaded, and the path unit started, right after they are
+  # copied (the command is run once, when the file was repaired).
+  - id: star-wars-desktop-refresh
+    name: Star Wars desktop refresh
+    description: Restarts the wallpaper and the screen saver of the open sessions when their files change.
+    technique: copyGitFile
+    version: "2.3"
+    instances:
+      - COPYFILE_NAME: star-wars/workstation/star-wars-refresh-desktop
+        COPYFILE_DESTINATION: /usr/local/sbin/star-wars-refresh-desktop
+        COPYFILE_PERM: "755"
+      - COPYFILE_NAME: star-wars/workstation/star-wars-refresh-desktop.service
+        COPYFILE_DESTINATION: /etc/systemd/system/star-wars-refresh-desktop.service
+        COPYFILE_POST_HOOK_RUN: "true"
+        COPYFILE_POST_HOOK_COMMAND: systemctl daemon-reload
+      - COPYFILE_NAME: star-wars/workstation/star-wars-refresh-desktop.path
+        COPYFILE_DESTINATION: /etc/systemd/system/star-wars-refresh-desktop.path
+        COPYFILE_POST_HOOK_RUN: "true"
+        # enable reloads systemd's units before it starts the path unit
+        COPYFILE_POST_HOOK_COMMAND: systemctl enable --now star-wars-refresh-desktop.path
+
+  # One screen locker. XFCE brings light-locker as well, which locks by itself
+  # on idleness with LightDM's own screen (its background, its login field) and
+  # ignores the screen saver's configuration above.
+  - id: star-wars-one-screen-locker
+    name: Star Wars screen locker
+    description: xfce4-screensaver locks the screen, and nothing else does.
+    technique: packageManagement
+    version: "1.3"
+    instances:
+      - PACKAGE_LIST: xfce4-screensaver
+        PACKAGE_STATE: present
+      - PACKAGE_LIST: light-locker
+        PACKAGE_STATE: absent
+
+# Applied to every node but the Rudder server itself.
+sw_rudder_rules:
+  - id: star-wars-workstations
+    name: Star Wars workstations
+    description: What every workstation gets.
+    directives:
+      - star-wars-desktop-files
+      - star-wars-screensaver
+      - star-wars-firefox
+      - star-wars-desktop-refresh
+      - star-wars-one-screen-locker
+    targets: ["special:all_exceptPolicyServers"]

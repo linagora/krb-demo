@@ -1,0 +1,124 @@
+- name: Debian 12 or 13 only
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version in ['12', '13']
+    fail_msg: The Rudder server is supported on Debian 12 and 13; this role targets those.
+
+- name: Set the host name
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
+# The machine's own name, and the domain controller's, one name per line.
+- name: Resolve the machine and the domain controller
+  ansible.builtin.blockinfile:
+    path: "{{ item }}"
+    marker: "# {mark} star wars demo"
+    block: |
+      {{ sw_rudder_address }} {{ sw_rudder_fqdn }} {{ inventory_hostname }}
+      {{ sw_dc_address }} {{ sw_fqdn }} {{ sw_hostname }}
+  loop:
+    - /etc/hosts
+    # cloud-init rewrites /etc/hosts at boot on cloud images.
+    - /etc/cloud/templates/hosts.debian.tmpl
+  failed_when: false
+
+- name: Install the repository's prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, gpg, curl]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Trust Rudder's package signing key
+  ansible.builtin.get_url:
+    url: https://repository.rudder.io/apt/rudder_apt_key.gpg
+    dest: /etc/apt/trusted.gpg.d/rudder_apt_key.gpg
+    mode: "0644"
+
+- name: Add Rudder's package repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://repository.rudder.io/apt/{{ sw_rudder_version }}/ {{ ansible_facts.distribution_release }} main"
+    filename: rudder
+    update_cache: true
+
+- name: Install the Rudder server
+  ansible.builtin.apt:
+    name: rudder-server
+  register: sw_rudder_install
+
+# The administrator of the web interface, from a file: the server has no
+# command to set a password without asking for it on the terminal. Rudder
+# rewrites the file when it starts, so it is written again only when the
+# password's hash is missing from it, not when the text differs.
+- name: Read the web interface's users
+  ansible.builtin.slurp:
+    src: /opt/rudder/etc/rudder-users.xml
+  register: sw_rudder_users
+  failed_when: false
+  no_log: true
+
+- name: Set the web interface's administrator
+  ansible.builtin.template:
+    src: rudder-users.xml.j2
+    dest: /opt/rudder/etc/rudder-users.xml
+    owner: root
+    group: root
+    mode: "0600"
+  diff: false
+  no_log: true
+  when: >-
+    sw_rudder_users.content is not defined or
+    (sw_rudder_admin_hash not in (sw_rudder_users.content | b64decode))
+  notify: Restart Rudder web application
+
+- name: Start Rudder
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: [rudder-jetty, rudder-agent]
+
+# What goes through the REST API: it needs a token, which only the web
+# interface can hand out the first time.
+- name: Read the API token
+  ansible.builtin.set_fact:
+    sw_rudder_api_token: "{{ lookup('ansible.builtin.file', sw_rudder_api_token_file, errors='ignore') | trim }}"
+  no_log: true
+
+- name: Say what is left to do by hand
+  ansible.builtin.debug:
+    msg: >-
+      No API token in {{ sw_rudder_api_token_file }}: create an API account in
+      Administration > API accounts, put its token in that file, and run again.
+      Allowed networks ({{ sw_rudder_allowed_networks | join(', ') }}) are left to you.
+  when: sw_rudder_api_token | length == 0
+
+- name: Wait for the API
+  ansible.builtin.uri:
+    url: https://localhost/rudder/api/latest/status
+    validate_certs: false
+    status_code: [200, 401, 403]
+  register: sw_rudder_api
+  until: sw_rudder_api.status is defined
+  retries: 30
+  delay: 5
+  when: sw_rudder_api_token | length > 0
+
+- name: Allow the domain's networks
+  ansible.builtin.uri:
+    url: https://localhost/rudder/api/latest/settings/allowed_networks/root
+    method: POST
+    headers:
+      X-API-Token: "{{ sw_rudder_api_token }}"
+    body_format: json
+    body:
+      allowed_networks: "{{ sw_rudder_allowed_networks }}"
+    validate_certs: false
+    status_code: 200
+  changed_when: false
+  no_log: true
+  when: sw_rudder_api_token | length > 0
+
+- name: Deploy the policies
+  ansible.builtin.include_tasks: policies.yml
+  when: sw_rudder_api_token | length > 0

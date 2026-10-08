@@ -1,0 +1,47 @@
+# The Rudder agent: it fetches its configuration from the Rudder server, and
+# applies it. Debian 13 has agent packages; same series as the server.
+- name: Name the Rudder server
+  ansible.builtin.set_fact:
+    sw_rudder_server_fqdn: "{{ groups['rudder_server'][0] }}.{{ sw_domain }}"
+
+- name: Install the repository's prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, gpg, curl]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Trust Rudder's package signing key
+  ansible.builtin.get_url:
+    url: https://repository.rudder.io/apt/rudder_apt_key.gpg
+    dest: /etc/apt/trusted.gpg.d/rudder_apt_key.gpg
+    mode: "0644"
+
+- name: Add Rudder's package repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://repository.rudder.io/apt/{{ sw_rudder_version }}/ {{ ansible_facts.distribution_release }} main"
+    filename: rudder
+    update_cache: true
+
+- name: Install the Rudder agent
+  ansible.builtin.apt:
+    name: rudder-agent
+
+- name: Read the server the agent talks to
+  ansible.builtin.slurp:
+    src: /var/rudder/cfengine-community/policy_server.dat
+  register: sw_rudder_policy_server
+  failed_when: false
+
+- name: Point the agent at the Rudder server
+  ansible.builtin.command: rudder agent policy-server {{ sw_rudder_server_fqdn }}
+  when: >-
+    sw_rudder_policy_server.content is not defined or
+    (sw_rudder_policy_server.content | b64decode | trim) != sw_rudder_server_fqdn
+  changed_when: true
+  notify: Send the Rudder inventory
+
+- name: Start the agent
+  ansible.builtin.service:
+    name: rudder-agent
+    state: started
+    enabled: true
